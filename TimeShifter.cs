@@ -51,8 +51,9 @@ public class TimeShifter : Form
         // Admin kontrolü
         if (!IsRunAsAdmin())
         {
-            RestartAsAdmin();
-            return;
+            // Fail-safe: normalde bu kontrol Main() içinde yapılır.
+            RestartAsAdminStatic();
+            Environment.Exit(0);
         }
 
         InitializeTray();
@@ -67,6 +68,18 @@ public class TimeShifter : Form
     }
 
     private void RestartAsAdmin()
+    {
+        RestartAsAdminStatic();
+    }
+
+    private static bool IsRunAsAdminStatic()
+    {
+        var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    private static void RestartAsAdminStatic()
     {
         var startInfo = new ProcessStartInfo
         {
@@ -83,8 +96,6 @@ public class TimeShifter : Form
         {
             MessageBox.Show("Admin yetkisi gerekli!", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-
-        Application.Exit();
     }
 
     private void InitializeTray()
@@ -457,9 +468,30 @@ public class TimeShifter : Form
                 return;
         }
 
-        trayIcon.Visible = false;
-        trayIcon.Dispose();
-        Application.Exit();
+        // Tüm kaynakları temizle
+        if (countdownTimer != null)
+        {
+            countdownTimer.Stop();
+            countdownTimer.Dispose();
+            countdownTimer = null;
+        }
+
+        if (trayIcon != null)
+        {
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+            trayIcon = null;
+        }
+
+        if (trayMenu != null)
+        {
+            trayMenu.Dispose();
+            trayMenu = null;
+        }
+
+        // Uygulamayı zorla kapat
+        Application.ExitThread();
+        Environment.Exit(0);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -469,7 +501,44 @@ public class TimeShifter : Form
             e.Cancel = true;
             this.Hide();
         }
+        else
+        {
+            // Sistem kapatılıyorsa veya başka bir nedenle kapanıyorsa, kaynakları temizle
+            CleanupResources();
+        }
         base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            CleanupResources();
+        }
+        base.Dispose(disposing);
+    }
+
+    private void CleanupResources()
+    {
+        if (countdownTimer != null)
+        {
+            countdownTimer.Stop();
+            countdownTimer.Dispose();
+            countdownTimer = null;
+        }
+
+        if (trayIcon != null)
+        {
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+            trayIcon = null;
+        }
+
+        if (trayMenu != null)
+        {
+            trayMenu.Dispose();
+            trayMenu = null;
+        }
     }
 
     [STAThread]
@@ -477,6 +546,16 @@ public class TimeShifter : Form
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+
+        // Admin değilsek: form/message-loop başlatmadan UAC ile yeniden çalıştır ve çık.
+        // Bu, task manager'da "process kaldı" problemini çözer (ilk non-admin proses).
+        if (!IsRunAsAdminStatic())
+        {
+            RestartAsAdminStatic();
+            Environment.Exit(0);
+            return;
+        }
+
         Application.Run(new TimeShifter());
     }
 }
