@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Security.Principal;
+using Microsoft.Win32;
 
 public class TimeShifter : Form
 {
@@ -17,6 +18,11 @@ public class TimeShifter : Form
 
     [DllImport("kernel32.dll")]
     private static extern void GetSystemTime(ref SYSTEMTIME st);
+
+    // Windows 11 tray icon "always show" ayarı OS tarafından yönetilir; kodla zorlamak mümkün değil.
+    // Ama kullanıcıya sabitleme yönergesini (tek seferlik) gösterebiliriz.
+    private const string RegistryKeyPath = @"HKEY_CURRENT_USER\Software\TimeShifter";
+    private const string RegistryValueTrayHint = "TrayPinHintShown";
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SYSTEMTIME
@@ -121,6 +127,13 @@ public class TimeShifter : Form
             Visible = true
         };
 
+        // İkon "ok altında" kalıyorsa bu Windows ayarıdır.
+        // Registry hack ile sabitlemeyi dene, olmazsa kullanıcıya ipucu göster.
+        if (!AttemptAutoPin())
+        {
+            ShowTrayPinHintOnce();
+        }
+
         trayIcon.DoubleClick += (s, e) =>
         {
             if (isShifted)
@@ -128,6 +141,105 @@ public class TimeShifter : Form
             else
                 OnShiftForward(s, e);
         };
+    }
+
+    // Windows 11 Tray Icon Sabitleme Hack'i
+    private bool AttemptAutoPin()
+    {
+        try
+        {
+            string path = @"Control Panel\NotifyIconSettings";
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(path, true))
+            {
+                if (key == null) return false;
+
+                string currentExePath = Application.ExecutablePath;
+                if (string.IsNullOrEmpty(currentExePath)) return false;
+
+                foreach (string subKeyName in key.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using (RegistryKey subKey = key.OpenSubKey(subKeyName, true))
+                        {
+                            if (subKey == null) continue;
+
+                            // Sadece kendi executable path'imizi kontrol et - başka uygulamalara dokunma
+                            object pathVal = subKey.GetValue("ExecutablePath");
+                            if (pathVal == null) continue;
+
+                            string exePath = pathVal.ToString();
+                            if (string.IsNullOrEmpty(exePath)) continue;
+
+                            // Sadece tam path eşleşmesi varsa işlem yap
+                            if (!exePath.Equals(currentExePath, StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            // Sadece kendi kaydımızı değiştir
+                            object promotedVal = subKey.GetValue("IsPromoted");
+                            // 1 = Sabitlenmiş (Görünür), 0 = Gizli
+                            if (promotedVal == null || (int)promotedVal != 1)
+                            {
+                                subKey.SetValue("IsPromoted", 1, RegistryValueKind.DWord);
+                            }
+                            return true; // Kaydı bulduk (zaten sabitli veya biz sabitledik)
+                        }
+                    }
+                    catch
+                    {
+                        // Bu subkey'de hata oldu, diğerlerine devam et
+                        continue;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Registry erişim hatası - sessizce devam et
+        }
+        return false; // Kayıt bulunamadı (uygulama ilk kez çalışıyor olabilir)
+    }
+
+
+    private void ShowTrayPinHintOnce()
+    {
+        try
+        {
+            object val = Registry.GetValue(RegistryKeyPath, RegistryValueTrayHint, null);
+            if (val is int && (int)val == 1)
+                return;
+        }
+        catch { }
+
+        DialogResult result = MessageBox.Show(
+            "Windows 11 bazı sistem tepsisi ikonlarını varsayılan olarak gizleyebilir.\n\n" +
+            "İkonu saatin yanına sabitlemek için:\n" +
+            "1) Sağ alttaki (^) oka tıklayın.\n" +
+            "2) TimeShifter ikonunu tutup görev çubuğuna sürükleyin.\n\n" +
+            "İsterseniz Ayarlar ekranını açabilirim (Görev çubuğu ayarları).",
+            "TimeShifter - İkonu Sabitle",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+
+        try
+        {
+            Registry.SetValue(RegistryKeyPath, RegistryValueTrayHint, 1, RegistryValueKind.DWord);
+        }
+        catch { }
+
+        if (result == DialogResult.Yes)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "ms-settings:taskbar",
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+            }
+            catch { }
+        }
     }
 
     private void InitializeTimer()

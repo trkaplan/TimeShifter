@@ -1,0 +1,201 @@
+# TimeShifter Uninstaller Script
+# Bu script TimeShifter uygulamasını ve tüm kayıtlarını temizler
+
+# UTF-8 encoding ayarı
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  TimeShifter Uninstaller" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Admin kontrolü
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host "UYARI: Bu script yönetici yetkisi gerektirir." -ForegroundColor Yellow
+    Write-Host "Yönetici olarak çalıştırmak için PowerShell'i 'Yönetici olarak çalıştır' ile açın." -ForegroundColor Yellow
+    Write-Host ""
+    $response = Read-Host "Yine de devam etmek istiyor musunuz? (E/H)"
+    if ($response -ne "E" -and $response -ne "e") {
+        Write-Host "İşlem iptal edildi." -ForegroundColor Red
+        exit 1
+    }
+}
+
+$errorCount = 0
+
+# 1. Çalışan TimeShifter process'lerini durdur
+Write-Host "[1/5] Çalışan TimeShifter process'leri kontrol ediliyor..." -ForegroundColor Yellow
+$processes = Get-Process -Name "TimeShifter" -ErrorAction SilentlyContinue
+if ($processes) {
+    Write-Host "  -> $($processes.Count) process bulundu, kapatılıyor..." -ForegroundColor Yellow
+    foreach ($proc in $processes) {
+        try {
+            $proc.Kill()
+            Start-Sleep -Milliseconds 500
+            Write-Host "  -> Process kapatıldı: $($proc.Id)" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "  -> HATA: Process kapatılamadı: $($proc.Id)" -ForegroundColor Red
+            $errorCount++
+        }
+    }
+} else {
+    Write-Host "  -> Çalışan process bulunamadı." -ForegroundColor Green
+}
+
+# 2. Registry kayıtlarını temizle
+Write-Host ""
+Write-Host "[2/5] Registry kayıtları temizleniyor..." -ForegroundColor Yellow
+
+# HKEY_CURRENT_USER\Software\TimeShifter
+try {
+    $regPath = "HKCU:\Software\TimeShifter"
+    if (Test-Path $regPath) {
+        Remove-Item -Path $regPath -Recurse -Force -ErrorAction Stop
+        Write-Host "  -> Registry key silindi: $regPath" -ForegroundColor Green
+    } else {
+        Write-Host "  -> Registry key bulunamadı: $regPath" -ForegroundColor Gray
+    }
+}
+catch {
+    Write-Host "  -> HATA: Registry key silinemedi: $regPath" -ForegroundColor Red
+    Write-Host "     Hata: $($_.Exception.Message)" -ForegroundColor Red
+    $errorCount++
+}
+
+# HKEY_CURRENT_USER\Control Panel\NotifyIconSettings altındaki TimeShifter kayıtları
+try {
+    $notifyIconPath = "HKCU:\Control Panel\NotifyIconSettings"
+    if (Test-Path $notifyIconPath) {
+        $subKeys = Get-ChildItem -Path $notifyIconPath -ErrorAction SilentlyContinue
+        $removedCount = 0
+        
+        foreach ($subKey in $subKeys) {
+            try {
+                $exePath = Get-ItemProperty -Path $subKey.PSPath -Name "ExecutablePath" -ErrorAction SilentlyContinue
+                if ($exePath -and $exePath.ExecutablePath) {
+                    # TimeShifter.exe içeren path'leri bul
+                    if ($exePath.ExecutablePath -like "*TimeShifter*") {
+                        Remove-Item -Path $subKey.PSPath -Recurse -Force -ErrorAction Stop
+                        $removedCount++
+                        Write-Host "  -> Tray icon kaydı silindi: $($subKey.Name)" -ForegroundColor Green
+                    }
+                }
+            }
+            catch {
+                # Bu subkey'de hata oldu, devam et
+            }
+        }
+        
+        if ($removedCount -eq 0) {
+            Write-Host "  -> Tray icon kaydı bulunamadı." -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "  -> NotifyIconSettings path bulunamadı." -ForegroundColor Gray
+    }
+}
+catch {
+    Write-Host "  -> HATA: Tray icon kayıtları temizlenemedi." -ForegroundColor Red
+    Write-Host "     Hata: $($_.Exception.Message)" -ForegroundColor Red
+    $errorCount++
+}
+
+# 3. Uygulama dosyasını bul ve sil
+Write-Host ""
+Write-Host "[3/5] Uygulama dosyası aranıyor..." -ForegroundColor Yellow
+
+# Bat dosyasının çalıştığı klasör (current working directory)
+$currentDir = Get-Location | Select-Object -ExpandProperty Path
+
+$possiblePaths = @(
+    "$env:ProgramFiles\TimeShifter\TimeShifter.exe",
+    "$env:ProgramFiles(x86)\TimeShifter\TimeShifter.exe",
+    "$env:LOCALAPPDATA\TimeShifter\TimeShifter.exe",
+    "$env:USERPROFILE\Desktop\TimeShifter.exe",
+    "$env:USERPROFILE\Downloads\TimeShifter.exe",
+    "$currentDir\TimeShifter.exe",
+    ".\TimeShifter.exe"
+)
+
+$foundFiles = @()
+foreach ($path in $possiblePaths) {
+    if (Test-Path $path) {
+        $foundFiles += $path
+    }
+}
+
+if ($foundFiles.Count -gt 0) {
+    Write-Host "  -> $($foundFiles.Count) dosya bulundu:" -ForegroundColor Yellow
+    foreach ($file in $foundFiles) {
+        Write-Host "     $file" -ForegroundColor Gray
+    }
+    Write-Host ""
+    $response = Read-Host "Bu dosyaları silmek istiyor musunuz? (E/H)"
+    if ($response -eq "E" -or $response -eq "e") {
+        foreach ($file in $foundFiles) {
+            try {
+                Remove-Item -Path $file -Force -ErrorAction Stop
+                Write-Host "  -> Dosya silindi: $file" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "  -> HATA: Dosya silinemedi: $file" -ForegroundColor Red
+                Write-Host "     Hata: $($_.Exception.Message)" -ForegroundColor Red
+                $errorCount++
+            }
+        }
+    } else {
+        Write-Host "  -> Dosya silme işlemi atlandı." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  -> TimeShifter.exe dosyası bulunamadı." -ForegroundColor Gray
+    Write-Host "     Dosyayı manuel olarak silebilirsiniz." -ForegroundColor Gray
+}
+
+# 4. Kısayolları temizle
+Write-Host ""
+Write-Host "[4/5] Kısayollar temizleniyor..." -ForegroundColor Yellow
+
+$shortcutPaths = @(
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\TimeShifter.lnk",
+    "$env:USERPROFILE\Desktop\TimeShifter.lnk",
+    "$env:PUBLIC\Desktop\TimeShifter.lnk"
+)
+
+$removedShortcuts = 0
+foreach ($shortcut in $shortcutPaths) {
+    if (Test-Path $shortcut) {
+        try {
+            Remove-Item -Path $shortcut -Force -ErrorAction Stop
+            Write-Host "  -> Kısayol silindi: $shortcut" -ForegroundColor Green
+            $removedShortcuts++
+        }
+        catch {
+            Write-Host "  -> HATA: Kısayol silinemedi: $shortcut" -ForegroundColor Red
+            $errorCount++
+        }
+    }
+}
+
+if ($removedShortcuts -eq 0) {
+    Write-Host "  -> Kısayol bulunamadı." -ForegroundColor Gray
+}
+
+# 5. Özet
+Write-Host ""
+Write-Host "[5/5] Temizleme tamamlandı!" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+if ($errorCount -eq 0) {
+    Write-Host "  TimeShifter başarıyla kaldırıldı!" -ForegroundColor Green
+} else {
+    Write-Host "  TimeShifter kaldırıldı, ancak $errorCount hata oluştu." -ForegroundColor Yellow
+    Write-Host "  Bazı dosyalar veya kayıtlar manuel olarak temizlenebilir." -ForegroundColor Yellow
+}
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Çıkmak için bir tuşa basın..." -ForegroundColor Gray
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+

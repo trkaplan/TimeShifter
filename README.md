@@ -52,6 +52,16 @@ Yeni Windows Forms projesi oluştur, kodu yapıştır, derle.
 - .NET Framework 4.0+
 - Admin yetkisi
 
+## Kaldırma
+
+Uygulamayı kaldırmak için `uninstall.bat` dosyasını çalıştırın. Bu script:
+- Çalışan TimeShifter process'lerini durdurur
+- Registry kayıtlarını temizler
+- Uygulama dosyasını bulur ve siler
+- Kısayolları temizler
+
+**Not:** Yönetici yetkisi gerekebilir.
+
 ## Not
 
 Test ve geliştirme amaçlıdır. Üretim ortamında dikkatli kullanın.
