@@ -37,7 +37,9 @@ public class TimeShifter : Form
     private DateTime? originalTime;
     private DateTime? shiftedTime;
     private int remainingMinutes;
-    private int defaultMinutes = 30;
+    private int defaultMinutes = 10; // Varsayılan: 10 dakika
+    private bool untilEndOfDay = false; // Gün sonuna kadar modu
+    private int shiftAmount = 12; // Varsayılan: 1 yıl (12 ay)
     private bool isShifted = false;
     private bool warningShown = false;
 
@@ -107,14 +109,21 @@ public class TimeShifter : Form
     private void InitializeTray()
     {
         trayMenu = new ContextMenuStrip();
-        trayMenu.Items.Add("⏩ Saati 1 Yıl İleri Al", null, OnShiftForward);
+        
+        // İleri alma seçenekleri
+        trayMenu.Items.Add("⏩ İleri Al: 1 Yıl", null, (s, e) => OnShiftForward(12));
+        trayMenu.Items.Add("⏩ İleri Al: 3 Ay", null, (s, e) => OnShiftForward(3));
+        trayMenu.Items.Add("⏩ İleri Al: 1 Ay", null, (s, e) => OnShiftForward(1));
         trayMenu.Items.Add(new ToolStripSeparator());
-        trayMenu.Items.Add("⏱️ Süre: 30 dk", null, null).Enabled = false;
-        trayMenu.Items.Add("   15 dakika", null, (s, e) => SetDuration(15));
-        trayMenu.Items.Add("   30 dakika", null, (s, e) => SetDuration(30));
-        trayMenu.Items.Add("   60 dakika", null, (s, e) => SetDuration(60));
-        trayMenu.Items.Add("   120 dakika", null, (s, e) => SetDuration(120));
+        
+        // Reset süresi seçenekleri
+        trayMenu.Items.Add("⏱️ Reset Süresi: 10 dk", null, null).Enabled = false;
+        trayMenu.Items.Add("   10 dakika", null, (s, e) => SetDuration(10, false));
+        trayMenu.Items.Add("   30 dakika", null, (s, e) => SetDuration(30, false));
+        trayMenu.Items.Add("   2 saat", null, (s, e) => SetDuration(120, false));
+        trayMenu.Items.Add("   Gün sonuna kadar", null, (s, e) => SetDuration(0, true));
         trayMenu.Items.Add(new ToolStripSeparator());
+        
         trayMenu.Items.Add("🔄 Saati Geri Al", null, OnResetTime);
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("❌ Çıkış", null, OnExit);
@@ -139,7 +148,7 @@ public class TimeShifter : Form
             if (isShifted)
                 OnResetTime(s, e);
             else
-                OnShiftForward(s, e);
+                OnShiftForward(shiftAmount); // Varsayılan ileri alma miktarı
         };
     }
 
@@ -247,28 +256,43 @@ public class TimeShifter : Form
         countdownTimer = new System.Windows.Forms.Timer();
         countdownTimer.Interval = 60000; // 1 dakika
         countdownTimer.Tick += OnTimerTick;
+        
+        // Gün sonuna kadar modunda daha sık kontrol et (her 10 saniyede bir)
+        // Bu timer'ı dinamik olarak değiştirebiliriz ama şimdilik 1 dakika yeterli
     }
 
-    private void SetDuration(int minutes)
+    private void SetDuration(int minutes, bool untilEndOfDayMode)
     {
         defaultMinutes = minutes;
-        ((ToolStripMenuItem)trayMenu.Items[2]).Text = string.Format("⏱️ Süre: {0} dk", minutes);
+        untilEndOfDay = untilEndOfDayMode;
+        
+        string durationText = untilEndOfDayMode ? "Gün sonuna kadar" : string.Format("{0} dk", minutes);
+        ((ToolStripMenuItem)trayMenu.Items[4]).Text = string.Format("⏱️ Reset Süresi: {0}", durationText);
         
         // Tick işareti güncelle
-        for (int i = 3; i <= 6; i++)
+        for (int i = 5; i <= 8; i++)
         {
             var item = (ToolStripMenuItem)trayMenu.Items[i];
-            item.Checked = item.Text.Contains(minutes.ToString());
+            if (untilEndOfDayMode)
+            {
+                item.Checked = (i == 8); // Sadece "Gün sonuna kadar" seçili
+            }
+            else
+            {
+                item.Checked = item.Text.Contains(minutes.ToString());
+            }
         }
     }
 
-    private void OnShiftForward(object sender, EventArgs e)
+    private void OnShiftForward(int months)
     {
         if (isShifted)
         {
             MessageBox.Show("Saat zaten ileri alınmış!", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+
+        shiftAmount = months; // Seçilen ileri alma miktarını kaydet
 
         // İşlem popup'ı göster
         Form progressForm = ShowProgressForm("Saat ileri alınıyor...\nLütfen bekleyin.");
@@ -280,19 +304,41 @@ public class TimeShifter : Form
             StopTimeService();
             Application.DoEvents();
 
-            // Saati kaydet ve 1 yıl ileri al
+            // Saati kaydet ve ileri al
             originalTime = DateTime.UtcNow;
             
             SYSTEMTIME st = new SYSTEMTIME();
             GetSystemTime(ref st);
-            st.wYear = (ushort)(st.wYear + 1);
+            
+            // Ay ekle
+            int newMonth = st.wMonth + months;
+            int newYear = st.wYear;
+            while (newMonth > 12)
+            {
+                newMonth -= 12;
+                newYear++;
+            }
+            
+            st.wYear = (ushort)newYear;
+            st.wMonth = (ushort)newMonth;
             SetSystemTime(ref st);
             Application.DoEvents();
 
             shiftedTime = DateTime.UtcNow;
             isShifted = true;
             warningShown = false;
-            remainingMinutes = defaultMinutes;
+
+            // Reset süresini hesapla
+            if (untilEndOfDay)
+            {
+                DateTime now = DateTime.Now;
+                DateTime endOfDay = now.Date.AddDays(1).AddSeconds(-1);
+                remainingMinutes = (int)(endOfDay - now).TotalMinutes;
+            }
+            else
+            {
+                remainingMinutes = defaultMinutes;
+            }
 
             // UI güncelle
             UpdateTrayIcon();
@@ -309,8 +355,10 @@ public class TimeShifter : Form
         }
 
         // Tamamlandı mesajı
+        string shiftText = months == 12 ? "1 yıl" : months == 3 ? "3 ay" : "1 ay";
+        string resetText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika", remainingMinutes);
         MessageBox.Show(
-            string.Format("Saat 1 yıl ileri alındı.\nOtomatik geri alma: {0} dakika", remainingMinutes),
+            string.Format("Saat {0} ileri alındı.\nOtomatik geri alma: {1}", shiftText, resetText),
             "TimeShifter - İşlem Tamamlandı",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
@@ -320,7 +368,18 @@ public class TimeShifter : Form
     {
         if (!isShifted) return;
 
-        remainingMinutes--;
+        // Gün sonuna kadar modunda, süreyi yeniden hesapla
+        if (untilEndOfDay)
+        {
+            DateTime now = DateTime.Now;
+            DateTime endOfDay = now.Date.AddDays(1).AddSeconds(-1);
+            remainingMinutes = (int)(endOfDay - now).TotalMinutes;
+        }
+        else
+        {
+            remainingMinutes--;
+        }
+
         UpdateTrayIcon();
 
         // 5 dakika kala uyarı
@@ -352,12 +411,22 @@ public class TimeShifter : Form
         if (result == DialogResult.Yes)
         {
             // Süreyi uzat
-            remainingMinutes = defaultMinutes;
+            if (untilEndOfDay)
+            {
+                DateTime now = DateTime.Now;
+                DateTime endOfDay = now.Date.AddDays(1).AddSeconds(-1);
+                remainingMinutes = (int)(endOfDay - now).TotalMinutes;
+            }
+            else
+            {
+                remainingMinutes = defaultMinutes;
+            }
             warningShown = false;
             UpdateTrayIcon();
             
+            string extendText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika", defaultMinutes);
             MessageBox.Show(
-                string.Format("Süre {0} dakika uzatıldı.", defaultMinutes),
+                string.Format("Süre {0} uzatıldı.", extendText),
                 "TimeShifter",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -393,6 +462,7 @@ public class TimeShifter : Form
             originalTime = null;
             shiftedTime = null;
             warningShown = false;
+            untilEndOfDay = false;
 
             UpdateTrayIcon();
         }
@@ -422,18 +492,29 @@ public class TimeShifter : Form
             Color color = remainingMinutes <= 5 ? warningColor : shiftedColor;
             
             trayIcon.Icon = CreateIcon(color, text);
-            trayIcon.Text = string.Format("TimeShifter - {0} dk kaldı\nSaat 1 yıl ileri", remainingMinutes);
             
-            ((ToolStripMenuItem)trayMenu.Items[0]).Enabled = false;
-            ((ToolStripMenuItem)trayMenu.Items[8]).Enabled = true;
+            string shiftText = shiftAmount == 12 ? "1 yıl" : shiftAmount == 3 ? "3 ay" : "1 ay";
+            string timeText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dk kaldı", remainingMinutes);
+            trayIcon.Text = string.Format("TimeShifter - {0}\nSaat {1} ileri", timeText, shiftText);
+            
+            // Menü öğelerini devre dışı bırak
+            for (int i = 0; i < 3; i++)
+            {
+                ((ToolStripMenuItem)trayMenu.Items[i]).Enabled = false;
+            }
+            ((ToolStripMenuItem)trayMenu.Items[10]).Enabled = true; // Geri al
         }
         else
         {
             trayIcon.Icon = CreateIcon(normalColor, "");
             trayIcon.Text = "TimeShifter - Hazır";
             
-            ((ToolStripMenuItem)trayMenu.Items[0]).Enabled = true;
-            ((ToolStripMenuItem)trayMenu.Items[8]).Enabled = false;
+            // Menü öğelerini etkinleştir
+            for (int i = 0; i < 3; i++)
+            {
+                ((ToolStripMenuItem)trayMenu.Items[i]).Enabled = true;
+            }
+            ((ToolStripMenuItem)trayMenu.Items[10]).Enabled = false; // Geri al
         }
     }
 

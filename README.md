@@ -1,29 +1,37 @@
 # TimeShifter ⏰
 
-Windows sistem saatini geçici olarak 1 yıl ileri alan system tray uygulaması.
+Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 
 ## Özellikler
 
 - 🟢 **Yeşil ikon**: Saat normal
-- 🔴 **Kırmızı ikon**: Saat 1 yıl ileri alınmış (kalan dakika gösterir)
+- 🔴 **Kırmızı ikon**: Saat ileri alınmış (kalan dakika gösterir)
 - 🟡 **Sarı ikon**: 5 dakika kaldı, uyarı
 
 ### Kullanım
 
-1. **Çift tık**: Saati ileri al / geri al (toggle)
+1. **Çift tık**: Saati ileri al / geri al (toggle - varsayılan: 1 yıl)
 2. **Sağ tık menüsü**:
-   - Saati 1 yıl ileri al
-   - Süre seçimi (15/30/60/120 dk)
+   - **İleri Alma Seçenekleri**:
+     - 1 Yıl
+     - 3 Ay
+     - 1 Ay
+   - **Reset Süresi Seçenekleri**:
+     - 10 dakika (varsayılan)
+     - 30 dakika
+     - 2 saat
+     - Gün sonuna kadar
    - Saati geri al
    - Çıkış
 
 ### Akıllı Geri Alma
 
-- Varsayılan süre: 30 dakika
+- Varsayılan reset süresi: 10 dakika
 - 5 dakika kala uyarı penceresi çıkar
 - "Evet" → süre uzatılır
 - "Hayır" → sayaç devam eder, süre dolunca saat geri alınır
 - Uyarıya yanıt verilmeden saat geri alınmaz (kullanıcı AFK olabilir)
+- "Gün sonuna kadar" seçeneği ile günün sonuna kadar otomatik geri alma
 
 ### Güvenlik
 
@@ -52,15 +60,11 @@ Yeni Windows Forms projesi oluştur, kodu yapıştır, derle.
 - .NET Framework 4.0+
 - Admin yetkisi
 
-## Kaldırma
+## Registry Temizleme
 
-Uygulamayı kaldırmak için `uninstall.bat` dosyasını çalıştırın. Bu script:
-- Çalışan TimeShifter process'lerini durdurur
-- Registry kayıtlarını temizler
-- Uygulama dosyasını bulur ve siler
-- Kısayolları temizler
-
-**Not:** Yönetici yetkisi gerekebilir.
+Registry kayıtlarını temizlemek için `clean-registry.bat` dosyasını çalıştırın. Bu script:
+- `HKEY_CURRENT_USER\Software\TimeShifter` kaydını siler
+- `HKEY_CURRENT_USER\Control Panel\NotifyIconSettings` altındaki TimeShifter kayıtlarını temizler
 
 ## Not
 
