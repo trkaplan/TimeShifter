@@ -233,9 +233,11 @@ public class TimeShifter : Form
             warningShown = false;
             UpdateTrayIcon();
             
-            trayIcon.ShowBalloonTip(2000, "TimeShifter", 
-                string.Format("Süre {0} dakika uzatıldı.", defaultMinutes), 
-                ToolTipIcon.Info);
+            MessageBox.Show(
+                string.Format("Süre {0} dakika uzatıldı.", defaultMinutes),
+                "TimeShifter",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
         else
         {
