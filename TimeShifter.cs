@@ -62,11 +62,15 @@ public class TimeShifter : Form
 
     public TimeShifter()
     {
-        // Form'u gizle
+        // Form'u gizle (ana form arka planda çalışır)
         this.WindowState = FormWindowState.Minimized;
         this.ShowInTaskbar = false;
         this.FormBorderStyle = FormBorderStyle.None;
-        this.Load += (s, e) => this.Visible = false;
+        this.Load += (s, e) => {
+            this.Visible = false;
+            // Başlangıçta QuickActionForm'u göster
+            ShowQuickActionForm();
+        };
 
         // Admin kontrolü
         if (!IsRunAsAdmin())
@@ -393,8 +397,8 @@ public class TimeShifter : Form
 
         UpdateTrayIcon();
 
-        // 5 dakika kala uyarı
-        if (remainingMinutes == 5 && !warningShown)
+        // 1 dakika kala uyarı
+        if (remainingMinutes == 1 && !warningShown)
         {
             warningShown = true;
             ShowExtensionWarning();
@@ -409,10 +413,10 @@ public class TimeShifter : Form
 
     private void ShowExtensionWarning()
     {
-        trayIcon.Icon = CreateIcon(warningColor, "5");
+        trayIcon.Icon = CreateIcon(warningColor, "1");
         
         var result = MessageBox.Show(
-            "Saat 5 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz?",
+            "Saat 1 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz?",
             "TimeShifter - Süre Bitiyor",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
@@ -529,7 +533,7 @@ public class TimeShifter : Form
         if (isShifted)
         {
             string text = remainingMinutes > 0 ? remainingMinutes.ToString() : "!";
-            Color color = remainingMinutes <= 5 ? warningColor : shiftedColor;
+            Color color = remainingMinutes <= 1 ? warningColor : shiftedColor;
             
             trayIcon.Icon = CreateIcon(color, text);
             
