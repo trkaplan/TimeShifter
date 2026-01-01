@@ -454,9 +454,35 @@ public class TimeShifter : Form
         {
             countdownTimer.Stop();
 
-            // Windows Time servisini başlat
+            // Windows Time servisini durdur (saati manuel ayarlamak için)
+            StopTimeService();
+
+            // Eğer originalTime kaydedilmişse, saati ona göre geri al
+            if (originalTime.HasValue && shiftedTime.HasValue)
+            {
+                // Geçen gerçek süreyi hesapla (shiftedTime'dan şimdiye kadar geçen süre)
+                TimeSpan elapsed = DateTime.UtcNow - shiftedTime.Value;
+                
+                // Original time'a geçen süreyi ekle (böylece doğru zamanı buluruz)
+                DateTime targetTime = originalTime.Value.Add(elapsed);
+                
+                SYSTEMTIME st = new SYSTEMTIME();
+                
+                // SetSystemTime UTC zaman bekliyor
+                st.wYear = (ushort)targetTime.Year;
+                st.wMonth = (ushort)targetTime.Month;
+                st.wDay = (ushort)targetTime.Day;
+                st.wDayOfWeek = (ushort)targetTime.DayOfWeek;
+                st.wHour = (ushort)targetTime.Hour;
+                st.wMinute = (ushort)targetTime.Minute;
+                st.wSecond = (ushort)targetTime.Second;
+                st.wMilliseconds = (ushort)targetTime.Millisecond;
+                
+                SetSystemTime(ref st);
+            }
+
+            // Windows Time servisini başlat (senkronizasyon arka planda yapılacak)
             StartTimeService();
-            Application.DoEvents();
 
             isShifted = false;
             originalTime = null;
@@ -468,14 +494,21 @@ public class TimeShifter : Form
         }
         finally
         {
-            // Popup'ı kapat
+            // Popup'ı kapat (İşlem tamamlandı mesajından önce)
             if (progressForm != null)
             {
                 progressForm.Close();
                 progressForm.Dispose();
             }
         }
-
+        
+        // Senkronizasyonu arka planda başlat (kullanıcıyı bekletmeden)
+        System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+        {
+            System.Threading.Thread.Sleep(500); // Servis başlaması için kısa bekleme
+            ForceTimeSync();
+        });
+        
         // Tamamlandı mesajı
         MessageBox.Show(
             "Saat geri alındı ve senkronize edildi.",
@@ -636,11 +669,27 @@ public class TimeShifter : Form
             if (process != null)
                 process.WaitForExit();
 
-            psi.FileName = "w32tm";
-            psi.Arguments = "/resync /force";
-            process = Process.Start(psi);
+            // Servis başladıktan sonra biraz bekle
+            System.Threading.Thread.Sleep(1000);
+        }
+        catch { }
+    }
+
+    private void ForceTimeSync()
+    {
+        try
+        {
+            // Sadece senkronize et (config zaten yapılmış olmalı)
+            var psi = new ProcessStartInfo
+            {
+                FileName = "w32tm",
+                Arguments = "/resync /force",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true
+            };
+            var process = Process.Start(psi);
             if (process != null)
-                process.WaitForExit();
+                process.WaitForExit(3000); // Maksimum 3 saniye bekle
         }
         catch { }
     }
