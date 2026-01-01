@@ -44,6 +44,13 @@ public class TimeShifter : Form
     private bool isShifted = false;
     private bool warningShown = false;
 
+    // QuickActionForm için public property'ler
+    public bool IsShifted { get { return isShifted; } }
+    public int ShiftAmount { get { return shiftAmount; } }
+    public int RemainingMinutes { get { return remainingMinutes; } set { remainingMinutes = value; } }
+    public bool UntilEndOfDay { get { return untilEndOfDay; } }
+    public bool WarningShown { get { return warningShown; } set { warningShown = value; } }
+
     // Renkler
     private readonly Color normalColor = Color.FromArgb(107, 114, 128); // Gri
     private readonly Color shiftedColor = Color.FromArgb(239, 68, 68);  // Kırmızı
@@ -144,24 +151,13 @@ public class TimeShifter : Form
             ShowTrayPinHintOnce();
         }
 
-        trayIcon.Click += (s, e) =>
+        trayIcon.MouseClick += (s, e) =>
         {
-            // Sol tık ile context menüyü native şekilde aç (sağ tık gibi)
-            // Reflection ile private ShowContextMenu metodunu çağır
-            var method = typeof(NotifyIcon).GetMethod("ShowContextMenu", 
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            if (method != null)
+            // Sadece sol tık ile hızlı erişim penceresini aç (sağ tık context menüyü açacak)
+            if (e.Button == MouseButtons.Left)
             {
-                method.Invoke(trayIcon, null);
+                ShowQuickActionForm();
             }
-        };
-
-        trayIcon.DoubleClick += (s, e) =>
-        {
-            if (isShifted)
-                OnResetTime(s, e);
-            else
-                OnShiftForward(shiftAmount); // Varsayılan ileri alma miktarı
         };
     }
 
@@ -274,7 +270,7 @@ public class TimeShifter : Form
         // Bu timer'ı dinamik olarak değiştirebiliriz ama şimdilik 1 dakika yeterli
     }
 
-    private void SetDuration(int minutes, bool untilEndOfDayMode)
+    public void SetDuration(int minutes, bool untilEndOfDayMode)
     {
         defaultMinutes = minutes;
         untilEndOfDay = untilEndOfDayMode;
@@ -297,7 +293,7 @@ public class TimeShifter : Form
         }
     }
 
-    private void OnShiftForward(int months)
+    public void OnShiftForward(int months)
     {
         if (isShifted)
         {
@@ -451,7 +447,7 @@ public class TimeShifter : Form
         }
     }
 
-    private void OnResetTime(object sender, EventArgs e)
+    public void OnResetTime(object sender, EventArgs e)
     {
         if (!isShifted)
         {
@@ -530,7 +526,7 @@ public class TimeShifter : Form
             MessageBoxIcon.Information);
     }
 
-    private void UpdateTrayIcon()
+    public void UpdateTrayIcon()
     {
         if (isShifted)
         {
@@ -707,7 +703,7 @@ public class TimeShifter : Form
         catch { }
     }
 
-    private void OnExit(object sender, EventArgs e)
+    public void OnExit(object sender, EventArgs e)
     {
         if (isShifted)
         {
@@ -796,6 +792,14 @@ public class TimeShifter : Form
         }
     }
 
+    private void ShowQuickActionForm()
+    {
+        using (QuickActionForm form = new QuickActionForm(this))
+        {
+            form.ShowDialog();
+        }
+    }
+
     [STAThread]
     public static void Main()
     {
@@ -812,5 +816,212 @@ public class TimeShifter : Form
         }
 
         Application.Run(new TimeShifter());
+    }
+}
+
+// Hızlı Erişim Formu
+public class QuickActionForm : Form
+{
+    private TimeShifter parent;
+    private RadioButton rb1Month, rb3Months, rb1Year;
+    private RadioButton rb10Min, rb30Min, rb2Hours, rbUntilEndOfDay;
+    private Button btnAction, btnExtend, btnCancel;
+    private Label lblStatus;
+    private GroupBox gbShift, gbDuration;
+    private bool isShifted;
+
+    public QuickActionForm(TimeShifter parent)
+    {
+        this.parent = parent;
+        this.isShifted = parent.IsShifted;
+        InitializeForm();
+    }
+
+    private void InitializeForm()
+    {
+        this.Text = isShifted ? "TimeShifter - Yönet" : "TimeShifter - İleri Al";
+        // Form yüksekliği butonların altında boşluk bırakmayacak şekilde ayarlandı
+        this.Size = new Size(340, isShifted ? 270 : 240);
+        this.FormBorderStyle = FormBorderStyle.FixedDialog;
+        this.StartPosition = FormStartPosition.CenterScreen;
+        this.MaximizeBox = false;
+        this.MinimizeBox = false;
+        this.ShowInTaskbar = false;
+        this.TopMost = true;
+
+        // Durum label (sadece ileri alınmışken görünür)
+        if (isShifted)
+        {
+            lblStatus = new Label
+            {
+                Text = GetStatusText(),
+                Location = new Point(12, 10),
+                Size = new Size(320, 30),
+                AutoSize = false
+            };
+            this.Controls.Add(lblStatus);
+        }
+
+        int startY = isShifted ? 45 : 10;
+
+        // İleri alma seçenekleri (sadece normal durumda)
+        if (!isShifted)
+        {
+            gbShift = new GroupBox
+            {
+                Text = "İleri Alma:",
+                Location = new Point(12, startY),
+                Size = new Size(320, 65)
+            };
+
+            rb1Month = new RadioButton { Text = "1 Ay", Location = new Point(10, 20), Size = new Size(90, 20) };
+            rb3Months = new RadioButton { Text = "3 Ay", Location = new Point(110, 20), Size = new Size(90, 20) };
+            rb1Year = new RadioButton { Text = "1 Yıl", Location = new Point(210, 20), Size = new Size(90, 20), Checked = true };
+
+            gbShift.Controls.AddRange(new Control[] { rb1Month, rb3Months, rb1Year });
+            this.Controls.Add(gbShift);
+            startY += 75;
+        }
+
+        // Reset/Uzatma süresi seçenekleri
+        gbDuration = new GroupBox
+        {
+            Text = isShifted ? "Uzatma Süresi:" : "Reset Süresi:",
+            Location = new Point(12, startY),
+            Size = new Size(320, 65)
+        };
+
+        rb10Min = new RadioButton { Text = "10 dakika", Location = new Point(10, 20), Size = new Size(140, 20), Checked = !isShifted };
+        rb30Min = new RadioButton { Text = "30 dakika", Location = new Point(10, 40), Size = new Size(140, 20), Checked = isShifted };
+        rb2Hours = new RadioButton { Text = "2 saat", Location = new Point(160, 20), Size = new Size(140, 20) };
+        rbUntilEndOfDay = new RadioButton { Text = "Gün sonuna kadar", Location = new Point(160, 40), Size = new Size(150, 20) };
+
+        gbDuration.Controls.AddRange(new Control[] { rb10Min, rb30Min, rb2Hours, rbUntilEndOfDay });
+        this.Controls.Add(gbDuration);
+
+        // Butonlar
+        int buttonY = startY + 75;
+        if (isShifted)
+        {
+            btnAction = new Button
+            {
+                Text = "Geri Al",
+                Location = new Point(12, buttonY),
+                Size = new Size(70, 28),
+                DialogResult = DialogResult.OK
+            };
+            btnAction.Click += (s, e) => { this.Hide(); parent.OnResetTime(null, null); this.Close(); };
+
+            btnExtend = new Button
+            {
+                Text = "Uzat",
+                Location = new Point(90, buttonY),
+                Size = new Size(70, 28)
+            };
+            btnExtend.Click += (s, e) => { this.Hide(); ExtendTime(); this.Close(); };
+
+            btnCancel = new Button
+            {
+                Text = "İptal",
+                Location = new Point(168, buttonY),
+                Size = new Size(70, 28),
+                DialogResult = DialogResult.Cancel
+            };
+
+            Button btnExit = new Button
+            {
+                Text = "Çıkış",
+                Location = new Point(246, buttonY),
+                Size = new Size(70, 28)
+            };
+            btnExit.Click += (s, e) => { parent.OnExit(null, null); this.Close(); };
+
+            this.AcceptButton = btnAction;
+            this.CancelButton = btnCancel;
+            this.Controls.AddRange(new Control[] { btnAction, btnExtend, btnCancel, btnExit });
+        }
+        else
+        {
+            btnAction = new Button
+            {
+                Text = "İleri Al",
+                Location = new Point(12, buttonY),
+                Size = new Size(70, 28),
+                DialogResult = DialogResult.OK
+            };
+            btnAction.Click += (s, e) => { this.Hide(); ShiftForward(); this.Close(); };
+
+            btnCancel = new Button
+            {
+                Text = "İptal",
+                Location = new Point(90, buttonY),
+                Size = new Size(70, 28),
+                DialogResult = DialogResult.Cancel
+            };
+
+            Button btnExit = new Button
+            {
+                Text = "Çıkış",
+                Location = new Point(168, buttonY),
+                Size = new Size(70, 28)
+            };
+            btnExit.Click += (s, e) => { parent.OnExit(null, null); this.Close(); };
+
+            this.AcceptButton = btnAction;
+            this.CancelButton = btnCancel;
+            this.Controls.AddRange(new Control[] { btnAction, btnCancel, btnExit });
+        }
+
+        // Focus ve Enter tuşu desteği
+        this.Shown += (s, e) =>
+        {
+            this.Activate();
+            btnAction.Focus();
+        };
+
+        // Enter ve Esc tuşları için
+        this.KeyPreview = true;
+        this.KeyDown += (s, e) =>
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                this.Close();
+            }
+        };
+    }
+
+    private string GetStatusText()
+    {
+        if (!isShifted) return "";
+        string shiftText = parent.ShiftAmount == 12 ? "1 yıl" : parent.ShiftAmount == 3 ? "3 ay" : "1 ay";
+        string timeText = parent.UntilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika kaldı", parent.RemainingMinutes);
+        return string.Format("Durum: Saat {0} ileri\n{1}", shiftText, timeText);
+    }
+
+    private void ShiftForward()
+    {
+        int months = rb1Year.Checked ? 12 : (rb3Months.Checked ? 3 : 1);
+        int minutes = rbUntilEndOfDay.Checked ? 0 : (rb2Hours.Checked ? 120 : (rb30Min.Checked ? 30 : 10));
+        bool untilEnd = rbUntilEndOfDay.Checked;
+
+        // Reset süresini ayarla
+        parent.SetDuration(minutes, untilEnd);
+        
+        // İleri al
+        parent.OnShiftForward(months);
+    }
+
+    private void ExtendTime()
+    {
+        int minutes = rbUntilEndOfDay.Checked ? 0 : (rb2Hours.Checked ? 120 : (rb30Min.Checked ? 30 : 10));
+        bool untilEnd = rbUntilEndOfDay.Checked;
+
+        // Reset süresini ayarla ve uzat
+        parent.SetDuration(minutes, untilEnd);
+        parent.RemainingMinutes = untilEnd ? 
+            (int)(DateTime.Now.Date.AddDays(1).AddSeconds(-1) - DateTime.Now).TotalMinutes : 
+            minutes;
+        parent.WarningShown = false;
+        parent.UpdateTrayIcon();
     }
 }
