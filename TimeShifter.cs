@@ -4,6 +4,7 @@
 
 using System;
 using System.Drawing;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.Diagnostics;
@@ -44,7 +45,7 @@ public class TimeShifter : Form
     private bool warningShown = false;
 
     // Renkler
-    private readonly Color normalColor = Color.FromArgb(34, 197, 94);   // Yeşil
+    private readonly Color normalColor = Color.FromArgb(107, 114, 128); // Gri
     private readonly Color shiftedColor = Color.FromArgb(239, 68, 68);  // Kırmızı
     private readonly Color warningColor = Color.FromArgb(251, 191, 36); // Sarı
 
@@ -142,6 +143,18 @@ public class TimeShifter : Form
         {
             ShowTrayPinHintOnce();
         }
+
+        trayIcon.Click += (s, e) =>
+        {
+            // Sol tık ile context menüyü native şekilde aç (sağ tık gibi)
+            // Reflection ile private ShowContextMenu metodunu çağır
+            var method = typeof(NotifyIcon).GetMethod("ShowContextMenu", 
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            if (method != null)
+            {
+                method.Invoke(trayIcon, null);
+            }
+        };
 
         trayIcon.DoubleClick += (s, e) =>
         {
