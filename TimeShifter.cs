@@ -20,6 +20,10 @@ public class TimeShifter : Form
     [DllImport("kernel32.dll")]
     private static extern void GetSystemTime(ref SYSTEMTIME st);
 
+    // NotifyIcon için Icon handle cleanup (GDI leak önleme)
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
+
     // Windows 11 tray icon "always show" ayarı OS tarafından yönetilir; kodla zorlamak mümkün değil.
     // Ama kullanıcıya sabitleme yönergesini (tek seferlik) gösterebiliriz.
     private const string RegistryKeyPath = @"HKEY_CURRENT_USER\Software\TimeShifter";
@@ -125,7 +129,7 @@ public class TimeShifter : Form
         trayMenu.Items.Add(new ToolStripSeparator());
         
         // Reset süresi seçenekleri
-        trayMenu.Items.Add("⏱️ Reset Süresi: 10 dk", null, null).Enabled = false;
+        trayMenu.Items.Add("⏱️ Sıfırlama Süresi: 10 dk", null, null).Enabled = false;
         trayMenu.Items.Add("   10 dakika", null, (s, e) => SetDuration(10, false));
         trayMenu.Items.Add("   30 dakika", null, (s, e) => SetDuration(30, false));
         trayMenu.Items.Add("   2 saat", null, (s, e) => SetDuration(120, false));
@@ -276,7 +280,7 @@ public class TimeShifter : Form
         untilEndOfDay = untilEndOfDayMode;
         
         string durationText = untilEndOfDayMode ? "Gün sonuna kadar" : string.Format("{0} dk", minutes);
-        ((ToolStripMenuItem)trayMenu.Items[4]).Text = string.Format("⏱️ Reset Süresi: {0}", durationText);
+        ((ToolStripMenuItem)trayMenu.Items[4]).Text = string.Format("⏱️ Sıfırlama Süresi: {0}", durationText);
         
         // Tick işareti güncelle
         for (int i = 5; i <= 8; i++)
@@ -623,7 +627,18 @@ public class TimeShifter : Form
                 }
             }
 
-            return Icon.FromHandle(bitmap.GetHicon());
+            IntPtr hIcon = bitmap.GetHicon();
+            try
+            {
+                using (Icon temp = Icon.FromHandle(hIcon))
+                {
+                    return (Icon)temp.Clone(); // Clone edip handle bağımlılığını kopar
+                }
+            }
+            finally
+            {
+                try { DestroyIcon(hIcon); } catch { }
+            }
         }
     }
 
@@ -830,10 +845,21 @@ public class QuickActionForm : Form
     private TimeShifter parent;
     private RadioButton rb1Month, rb3Months, rb1Year;
     private RadioButton rb10Min, rb30Min, rb2Hours, rbUntilEndOfDay;
-    private Button btnAction, btnExtend, btnCancel;
-    private Label lblStatus;
+    private Button btnPrimary, btnSecondary, btnCancel;
+    private Label lblStatusPrimary, lblStatusSecondary;
     private GroupBox gbShift, gbDuration;
+    private Label lblDurationHelper;
+    private System.Windows.Forms.Timer uiTimer;
     private bool isShifted;
+    private Panel statusPanel;
+
+    // UI Colors - Windows 11 Fluent Design (simplified)
+    private static readonly Color AccentColor = Color.FromArgb(0, 120, 212);        // Primary blue
+    private static readonly Color AccentHoverColor = Color.FromArgb(0, 103, 192);   // Darker blue
+    private static readonly Color NeutralColor = Color.FromArgb(107, 114, 128);     // Gray
+    private static readonly Color IdleFormBg = Color.FromArgb(252, 252, 252);       // Form background
+    private static readonly Color StatusPanelBg = Color.FromArgb(248, 250, 252);    // Status panel background
+    private static readonly Color BorderColor = Color.FromArgb(229, 231, 235);      // Soft border
 
     public QuickActionForm(TimeShifter parent)
     {
@@ -844,144 +870,291 @@ public class QuickActionForm : Form
 
     private void InitializeForm()
     {
-        this.Text = isShifted ? "TimeShifter - Yönet" : "TimeShifter - İleri Al";
-        // Form yüksekliği butonların altında boşluk bırakmayacak şekilde ayarlandı
-        this.Size = new Size(340, isShifted ? 270 : 240);
+        this.Text = isShifted ? "TimeShifter — Aktif" : "TimeShifter";
+        // Form yüksekliği: Butonlar için yeterli alan bırak
+        this.Size = new Size(380, isShifted ? 380 : 355);
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
         this.StartPosition = FormStartPosition.CenterScreen;
         this.MaximizeBox = false;
         this.MinimizeBox = false;
         this.ShowInTaskbar = false;
         this.TopMost = true;
+        this.AutoScaleMode = AutoScaleMode.Dpi; // DPI-aware scaling
+        this.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        this.Padding = new Padding(16); // Increased padding for modern feel
 
-        // Durum label (sadece ileri alınmışken görünür)
-        if (isShifted)
+        // Task 3: Simplified - same background for both states
+        this.BackColor = IdleFormBg;
+
+        // Header
+        Label lblTitle = new Label
         {
-            lblStatus = new Label
-            {
-                Text = GetStatusText(),
-                Location = new Point(12, 10),
-                Size = new Size(320, 30),
-                AutoSize = false
-            };
-            this.Controls.Add(lblStatus);
-        }
-
-        int startY = isShifted ? 45 : 10;
-
-        // İleri alma seçenekleri (sadece normal durumda)
-        if (!isShifted)
-        {
-            gbShift = new GroupBox
-            {
-                Text = "İleri Alma:",
-                Location = new Point(12, startY),
-                Size = new Size(320, 65)
-            };
-
-            rb1Month = new RadioButton { Text = "1 Ay", Location = new Point(10, 20), Size = new Size(90, 20) };
-            rb3Months = new RadioButton { Text = "3 Ay", Location = new Point(110, 20), Size = new Size(90, 20) };
-            rb1Year = new RadioButton { Text = "1 Yıl", Location = new Point(210, 20), Size = new Size(90, 20), Checked = true };
-
-            gbShift.Controls.AddRange(new Control[] { rb1Month, rb3Months, rb1Year });
-            this.Controls.Add(gbShift);
-            startY += 75;
-        }
-
-        // Reset/Uzatma süresi seçenekleri
-        gbDuration = new GroupBox
-        {
-            Text = isShifted ? "Uzatma Süresi:" : "Reset Süresi:",
-            Location = new Point(12, startY),
-            Size = new Size(320, 65)
+            Text = "TimeShifter",
+            AutoSize = true,
+            // Task 3: Consistent font, no color change
+            Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold, GraphicsUnit.Point),
+            Location = new Point(this.Padding.Left, this.Padding.Top),
+            ForeColor = SystemColors.ControlText // Neutral color for both states
         };
 
-        rb10Min = new RadioButton { Text = "10 dakika", Location = new Point(10, 20), Size = new Size(140, 20), Checked = !isShifted };
-        rb30Min = new RadioButton { Text = "30 dakika", Location = new Point(10, 40), Size = new Size(140, 20), Checked = isShifted };
-        rb2Hours = new RadioButton { Text = "2 saat", Location = new Point(160, 20), Size = new Size(140, 20) };
-        rbUntilEndOfDay = new RadioButton { Text = "Gün sonuna kadar", Location = new Point(160, 40), Size = new Size(150, 20) };
+        Label lblSubtitle = new Label
+        {
+            Text = isShifted ? "Sistem saati ileri alınmış durumda" : "Sistem saatini ileri alma",
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            Location = new Point(this.Padding.Left, this.Padding.Top + 24)
+        };
 
-        gbDuration.Controls.AddRange(new Control[] { rb10Min, rb30Min, rb2Hours, rbUntilEndOfDay });
-        this.Controls.Add(gbDuration);
+        this.Controls.Add(lblTitle);
+        this.Controls.Add(lblSubtitle);
 
-        // Butonlar
-        int buttonY = startY + 75;
+        int startY = this.Padding.Top + 50;
+
+        // Status Panel (sadece ileri alınmışken) - Task 3: Simplified, no progress bar
         if (isShifted)
         {
-            btnAction = new Button
+            statusPanel = new Panel
             {
-                Text = "Geri Al",
-                Location = new Point(12, buttonY),
-                Size = new Size(70, 28),
-                DialogResult = DialogResult.OK
-            };
-            btnAction.Click += (s, e) => { this.Hide(); parent.OnResetTime(null, null); this.Close(); };
-
-            btnExtend = new Button
-            {
-                Text = "Uzat",
-                Location = new Point(90, buttonY),
-                Size = new Size(70, 28)
-            };
-            btnExtend.Click += (s, e) => { this.Hide(); ExtendTime(); this.Close(); };
-
-            btnCancel = new Button
-            {
-                Text = "İptal",
-                Location = new Point(168, buttonY),
-                Size = new Size(70, 28),
-                DialogResult = DialogResult.Cancel
+                Location = new Point(this.Padding.Left, startY),
+                Size = new Size(this.ClientSize.Width - this.Padding.Horizontal, 64), // Reduced height
+                BackColor = StatusPanelBg,
+                BorderStyle = BorderStyle.None
             };
 
-            Button btnExit = new Button
+            // Task 3: Simple border only, no accent strip
+            statusPanel.Paint += (s, e) =>
             {
-                Text = "Çıkış",
-                Location = new Point(246, buttonY),
-                Size = new Size(70, 28)
-            };
-            btnExit.Click += (s, e) => { this.Hide(); parent.OnExit(null, null); this.Close(); };
+                try
+                {
+                    var g = e.Graphics;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    var r = statusPanel.ClientRectangle;
 
-            this.AcceptButton = btnAction;
+                    // Draw soft border with rounded corners (4px radius) - low contrast
+                    using (var pen = new Pen(Color.FromArgb(77, BorderColor), 1f)) // 30% opacity
+                    {
+                        int radius = 4;
+                        DrawRoundedRectangle(g, pen, r.X, r.Y, r.Width - 1, r.Height - 1, radius);
+                    }
+                    // No accent bar - removed per Task 3
+                }
+                catch { }
+            };
+
+            // Icon aligned with first line text baseline
+            PictureBox pbIcon = new PictureBox
+            {
+                Location = new Point(14, 14),
+                Size = new Size(24, 24),
+                SizeMode = PictureBoxSizeMode.CenterImage,
+                Image = CreateClockBitmapMDL2(24, NeutralColor), // Native Windows Clock icon
+                BackColor = Color.Transparent
+            };
+
+            // Primary text - semibold but not too bold
+            lblStatusPrimary = new Label
+            {
+                Text = GetStatusPrimaryText(),
+                AutoSize = true,
+                Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold, GraphicsUnit.Point),
+                Location = new Point(48, 14), // Aligned with icon
+                BackColor = Color.Transparent,
+                ForeColor = Color.FromArgb(55, 65, 81) // Dark gray
+            };
+
+            // Secondary text
+            lblStatusSecondary = new Label
+            {
+                Text = GetStatusSecondaryText(),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
+                Location = new Point(48, 36),
+                BackColor = Color.Transparent,
+                ForeColor = SystemColors.GrayText
+            };
+
+            // No progress bar - removed per Task 3
+
+            statusPanel.Controls.Add(pbIcon);
+            statusPanel.Controls.Add(lblStatusPrimary);
+            statusPanel.Controls.Add(lblStatusSecondary);
+            this.Controls.Add(statusPanel);
+
+            startY += statusPanel.Height + 16;
+
+            // Status canlı güncelle
+            uiTimer = new System.Windows.Forms.Timer();
+            uiTimer.Interval = 1000;
+            uiTimer.Tick += (s, e) =>
+            {
+                if (lblStatusPrimary != null) lblStatusPrimary.Text = GetStatusPrimaryText();
+                if (lblStatusSecondary != null) lblStatusSecondary.Text = GetStatusSecondaryText();
+            };
+            uiTimer.Start();
+        }
+
+        // İleri alma seçenekleri (sadece normal durumda) - Task 4: Fixed alignment
+        if (!isShifted)
+        {
+            gbShift = CreateStyledGroupBox("İleri alma miktarı", startY, 70);
+
+            // Task 4: Manual layout for perfect alignment
+            int radioY = 24;
+            int col1X = 16;
+            int col2X = 120;
+            int col3X = 224;
+
+            rb1Month = CreateStyledRadioButton("1 ay", col1X, radioY, true, 0);
+            rb3Months = CreateStyledRadioButton("3 ay", col2X, radioY, false, 1);
+            rb1Year = CreateStyledRadioButton("1 yıl", col3X, radioY, false, 2);
+
+            gbShift.Controls.Add(rb1Month);
+            gbShift.Controls.Add(rb3Months);
+            gbShift.Controls.Add(rb1Year);
+
+            this.Controls.Add(gbShift);
+            startY += 80;
+        }
+
+        // Reset/Uzatma süresi seçenekleri - Task 4 & 5: Fixed layout
+        // Task 5: Fixed height to prevent layout jump (includes space for helper text)
+        int durationHeight = isShifted ? 120 : 110;
+        gbDuration = CreateStyledGroupBox(isShifted ? "Sıfırlamayı ertele" : "Sıfırlama süresi", startY, durationHeight);
+
+        // Task 4: Manual layout for perfect alignment
+        int baseY = isShifted ? 18 : 24;
+        int durCol1X = 16;
+        int durCol2X = 175;
+        int rowSpacing = 28;
+
+        // Subtitle for active state
+        if (isShifted)
+        {
+            var lblDurationSubtitle = new Label
+            {
+                Text = "Mevcut ileri alınmış süreyi uzatır",
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Location = new Point(durCol1X, baseY),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Regular, GraphicsUnit.Point)
+            };
+            gbDuration.Controls.Add(lblDurationSubtitle);
+            baseY += 22;
+        }
+
+        // Radio buttons with fixed positions (Task 4)
+        rb10Min = CreateStyledRadioButton("10 dakika", durCol1X, baseY, !isShifted, 3);
+        rb2Hours = CreateStyledRadioButton("2 saat", durCol2X, baseY, false, 5);
+        rb30Min = CreateStyledRadioButton("30 dakika", durCol1X, baseY + rowSpacing, isShifted, 4);
+        rbUntilEndOfDay = CreateStyledRadioButton("Gün sonuna kadar", durCol2X, baseY + rowSpacing, false, 6);
+
+        gbDuration.Controls.Add(rb10Min);
+        gbDuration.Controls.Add(rb2Hours);
+        gbDuration.Controls.Add(rb30Min);
+        gbDuration.Controls.Add(rbUntilEndOfDay);
+
+        // Task 5: Helper text with reserved space (always present, visibility controlled)
+        lblDurationHelper = new Label
+        {
+            Text = "",
+            AutoSize = false,
+            Size = new Size(gbDuration.Width - 32, 18),
+            Location = new Point(durCol1X, baseY + rowSpacing * 2 + 4),
+            ForeColor = Color.FromArgb(107, 114, 128),
+            Font = new Font("Segoe UI", 8F, FontStyle.Italic, GraphicsUnit.Point)
+        };
+        gbDuration.Controls.Add(lblDurationHelper);
+
+        rbUntilEndOfDay.CheckedChanged += (s, e) =>
+        {
+            if (lblDurationHelper != null)
+                lblDurationHelper.Text = rbUntilEndOfDay.Checked ? "Sıfırlama bugün 23:59'da yapılır." : "";
+        };
+        // İlk render
+        if (lblDurationHelper != null)
+            lblDurationHelper.Text = rbUntilEndOfDay.Checked ? "Sıfırlama bugün 23:59'da yapılır." : "";
+
+        this.Controls.Add(gbDuration);
+
+        // Butonlar (bottom-right) - Task 3: Styled buttons with hierarchy
+        FlowLayoutPanel buttonRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            AutoSize = true,
+            Location = new Point(this.Padding.Left, startY + durationHeight + 16),
+            Width = this.ClientSize.Width - this.Padding.Horizontal,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
+        };
+
+        // Tertiary button: İptal - lowest visual weight
+        btnCancel = CreateStyledButton("İptal", ButtonStyle.Neutral, 9);
+        btnCancel.Size = new Size(80, 32); // Smaller for tertiary
+        btnCancel.DialogResult = DialogResult.Cancel;
+
+        if (isShifted)
+        {
+            // Task 3: Primary button (accent blue)
+            btnPrimary = CreateStyledButton("Uzat", ButtonStyle.Primary, 7);
+            btnPrimary.Click += (s, e) => { this.Hide(); ExtendTime(); this.Close(); };
+            btnPrimary.Image = CreateAddBitmap(16, Color.White); // Native Windows Add icon
+            btnPrimary.ImageAlign = ContentAlignment.MiddleLeft;
+            btnPrimary.TextImageRelation = TextImageRelation.ImageBeforeText;
+
+            // Task 3: Secondary button - neutral style (not danger)
+            btnSecondary = CreateStyledButton("Geri Al", ButtonStyle.Neutral, 8);
+            btnSecondary.Click += (s, e) =>
+            {
+                // UX: Onay al
+                var result = MessageBox.Show(
+                    "Sistem saati normale dönecek. Devam etmek istiyor musunuz?",
+                    "Saat geri alınacak",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2);
+
+                if (result != DialogResult.Yes)
+                    return;
+
+                this.Hide();
+                parent.OnResetTime(null, null);
+                this.Close();
+            };
+            btnSecondary.Image = CreateUndoBitmap(16, NeutralColor); // Native Windows undo icon
+            btnSecondary.ImageAlign = ContentAlignment.MiddleLeft;
+            btnSecondary.TextImageRelation = TextImageRelation.ImageBeforeText;
+
+            buttonRow.Controls.Add(btnCancel);
+            buttonRow.Controls.Add(btnSecondary);
+            buttonRow.Controls.Add(btnPrimary);
+
+            // Enter → primary (Uzat)
+            this.AcceptButton = btnPrimary;
             this.CancelButton = btnCancel;
-            this.Controls.AddRange(new Control[] { btnAction, btnExtend, btnCancel, btnExit });
         }
         else
         {
-            btnAction = new Button
-            {
-                Text = "İleri Al",
-                Location = new Point(12, buttonY),
-                Size = new Size(70, 28),
-                DialogResult = DialogResult.OK
-            };
-            btnAction.Click += (s, e) => { this.Hide(); ShiftForward(); this.Close(); };
+            // Task 3: Primary button (accent blue)
+            btnPrimary = CreateStyledButton("İleri Al", ButtonStyle.Primary, 7);
+            btnPrimary.Click += (s, e) => { this.Hide(); ShiftForward(); this.Close(); };
+            btnPrimary.Image = CreateForwardBitmap(16, Color.White); // Native Windows Forward icon
+            btnPrimary.ImageAlign = ContentAlignment.MiddleLeft;
+            btnPrimary.TextImageRelation = TextImageRelation.ImageBeforeText;
 
-            btnCancel = new Button
-            {
-                Text = "İptal",
-                Location = new Point(90, buttonY),
-                Size = new Size(70, 28),
-                DialogResult = DialogResult.Cancel
-            };
+            buttonRow.Controls.Add(btnCancel);
+            buttonRow.Controls.Add(btnPrimary);
 
-            Button btnExit = new Button
-            {
-                Text = "Çıkış",
-                Location = new Point(168, buttonY),
-                Size = new Size(70, 28)
-            };
-            btnExit.Click += (s, e) => { this.Hide(); parent.OnExit(null, null); this.Close(); };
-
-            this.AcceptButton = btnAction;
+            this.AcceptButton = btnPrimary;
             this.CancelButton = btnCancel;
-            this.Controls.AddRange(new Control[] { btnAction, btnCancel, btnExit });
         }
+
+        this.Controls.Add(buttonRow);
 
         // Focus ve Enter tuşu desteği
         this.Shown += (s, e) =>
         {
             this.Activate();
-            btnAction.Focus();
+            if (btnPrimary != null) btnPrimary.Focus();
         };
 
         // Enter ve Esc tuşları için
@@ -995,12 +1168,186 @@ public class QuickActionForm : Form
         };
     }
 
+    // Button style enum
+    private enum ButtonStyle { Primary, Neutral }
+
+    // Create styled button with consistent height and appearance
+    private Button CreateStyledButton(string text, ButtonStyle style, int tabIndex)
+    {
+        var btn = new Button
+        {
+            Text = text,
+            Size = new Size(110, 32), // Consistent height
+            TabIndex = tabIndex,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point)
+        };
+
+        btn.Padding = new Padding(12, 0, 12, 0);
+        btn.TextAlign = ContentAlignment.MiddleCenter;
+        btn.Margin = new Padding(8, 0, 0, 0);
+
+        switch (style)
+        {
+            case ButtonStyle.Primary:
+                btn.BackColor = AccentColor;
+                btn.ForeColor = Color.White;
+                btn.FlatAppearance.BorderSize = 0;
+                btn.FlatAppearance.MouseOverBackColor = AccentHoverColor;
+                btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 90, 158);
+                break;
+
+            case ButtonStyle.Neutral:
+                btn.BackColor = Color.White;
+                btn.ForeColor = Color.FromArgb(55, 65, 81);
+                btn.FlatAppearance.BorderColor = BorderColor;
+                btn.FlatAppearance.BorderSize = 1;
+                btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(249, 250, 251);
+                btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(243, 244, 246);
+                break;
+        }
+
+        // Task 9: Focus ring (handled via Paint for custom appearance)
+        btn.GotFocus += (s, e) => btn.Invalidate();
+        btn.LostFocus += (s, e) => btn.Invalidate();
+        btn.Paint += (s, e) =>
+        {
+            if (btn.Focused)
+            {
+                var rect = btn.ClientRectangle;
+                rect.Inflate(-2, -2);
+                using (var pen = new Pen(AccentColor, 2f))
+                {
+                    e.Graphics.DrawRectangle(pen, rect);
+                }
+            }
+        };
+
+        return btn;
+    }
+
+    // Task 4: Create styled radio button with fixed position
+    private RadioButton CreateStyledRadioButton(string text, int x, int y, bool isChecked, int tabIndex)
+    {
+        return new RadioButton
+        {
+            Text = text,
+            AutoSize = true,
+            Location = new Point(x, y),
+            Checked = isChecked,
+            TabIndex = tabIndex,
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point)
+        };
+    }
+
+    // Task 8: Create styled GroupBox with rounded corners
+    private GroupBox CreateStyledGroupBox(string text, int y, int height)
+    {
+        var gb = new GroupBox
+        {
+            Text = text,
+            Location = new Point(this.Padding.Left, y),
+            Size = new Size(this.ClientSize.Width - this.Padding.Horizontal, height),
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = Color.FromArgb(55, 65, 81)
+        };
+        return gb;
+    }
+
+    // Draw rounded rectangle
+    private static void DrawRoundedRectangle(Graphics g, Pen pen, int x, int y, int width, int height, int radius)
+    {
+        using (var path = CreateRoundedRectPath(new Rectangle(x, y, width, height), radius))
+        {
+            g.DrawPath(pen, path);
+        }
+    }
+
+    // Helper: Create rounded rectangle path
+    private static System.Drawing.Drawing2D.GraphicsPath CreateRoundedRectPath(Rectangle rect, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = radius * 2;
+
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+
+        return path;
+    }
+
+    // Native Windows icon using Segoe MDL2 Assets font (Windows 10/11)
+    private static Bitmap CreateIconFromMDL2(int size, Color color, string glyphChar)
+    {
+        Bitmap bmp = new Bitmap(size, size);
+        using (Graphics g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            g.Clear(Color.Transparent);
+
+            // Segoe MDL2 Assets is the Windows 10/11 icon font
+            using (Font iconFont = new Font("Segoe MDL2 Assets", size * 0.7f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (SolidBrush brush = new SolidBrush(color))
+            {
+                StringFormat sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                };
+                g.DrawString(glyphChar, iconFont, brush, new RectangleF(0, 0, size, size), sf);
+            }
+        }
+        return bmp;
+    }
+
+    // MDL2 Icon codes: https://docs.microsoft.com/en-us/windows/apps/design/style/segoe-ui-symbol-font
+    private static Bitmap CreateUndoBitmap(int size, Color color)
+    {
+        return CreateIconFromMDL2(size, color, "\uE7A7"); // Undo icon
+    }
+
+    private static Bitmap CreateAddBitmap(int size, Color color)
+    {
+        return CreateIconFromMDL2(size, color, "\uE710"); // Add/Plus icon
+    }
+
+    private static Bitmap CreateForwardBitmap(int size, Color color)
+    {
+        return CreateIconFromMDL2(size, color, "\uE72A"); // Forward arrow icon
+    }
+
+    private static Bitmap CreateClockBitmapMDL2(int size, Color color)
+    {
+        return CreateIconFromMDL2(size, color, "\uE823"); // Clock icon
+    }
+
     private string GetStatusText()
     {
         if (!isShifted) return "";
         string shiftText = parent.ShiftAmount == 12 ? "1 yıl" : parent.ShiftAmount == 3 ? "3 ay" : "1 ay";
         string timeText = parent.UntilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika kaldı", parent.RemainingMinutes);
         return string.Format("Durum: Saat {0} ileri\n{1}", shiftText, timeText);
+    }
+
+    private string GetStatusPrimaryText()
+    {
+        if (!isShifted) return "";
+        string shiftText = parent.ShiftAmount == 12 ? "1 yıl" : parent.ShiftAmount == 3 ? "3 ay" : "1 ay";
+        return string.Format("Saat {0} ileri alındı", shiftText);
+    }
+
+    private string GetStatusSecondaryText()
+    {
+        if (!isShifted) return "";
+        if (parent.UntilEndOfDay)
+        {
+            return "Sıfırlama bugün 23:59’da yapılır.";
+        }
+        return string.Format("Sıfırlamaya {0} dakika kaldı", parent.RemainingMinutes);
     }
 
     private void ShiftForward()
@@ -1028,5 +1375,20 @@ public class QuickActionForm : Form
             minutes;
         parent.WarningShown = false;
         parent.UpdateTrayIcon();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        try
+        {
+            if (uiTimer != null)
+            {
+                uiTimer.Stop();
+                uiTimer.Dispose();
+                uiTimer = null;
+            }
+        }
+        catch { }
+        base.OnFormClosed(e);
     }
 }
