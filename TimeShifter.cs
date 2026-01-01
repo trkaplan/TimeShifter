@@ -363,14 +363,12 @@ public class TimeShifter : Form
             }
         }
 
-        // Tamamlandı mesajı
+        // Tamamlandı bildirimi
         string shiftText = months == 12 ? "1 yıl" : months == 3 ? "3 ay" : "1 ay";
         string resetText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika", remainingMinutes);
-        MessageBox.Show(
-            string.Format("Saat {0} ileri alındı.\nOtomatik geri alma: {1}", shiftText, resetText),
-            "TimeShifter - İşlem Tamamlandı",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        ShowNotification(
+            string.Format("Saat {0} ileri alındı\nOtomatik geri alma: {1}", shiftText, resetText),
+            ToolTipIcon.Info);
     }
 
     private void OnTimerTick(object sender, EventArgs e)
@@ -518,12 +516,8 @@ public class TimeShifter : Form
             ForceTimeSync();
         });
         
-        // Tamamlandı mesajı
-        MessageBox.Show(
-            "Saat geri alındı ve senkronize edildi.",
-            "TimeShifter - İşlem Tamamlandı",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        // Tamamlandı bildirimi
+        ShowNotification("Saat geri alındı ve senkronize edildi.", ToolTipIcon.Info);
     }
 
     public void UpdateTrayIcon()
@@ -800,6 +794,17 @@ public class TimeShifter : Form
         }
     }
 
+    private void ShowNotification(string message, ToolTipIcon icon = ToolTipIcon.Info)
+    {
+        if (trayIcon != null)
+        {
+            trayIcon.BalloonTipTitle = "TimeShifter";
+            trayIcon.BalloonTipText = message;
+            trayIcon.BalloonTipIcon = icon;
+            trayIcon.ShowBalloonTip(3500); // 3.5 saniye
+        }
+    }
+
     [STAThread]
     public static void Main()
     {
@@ -934,7 +939,7 @@ public class QuickActionForm : Form
                 Location = new Point(246, buttonY),
                 Size = new Size(70, 28)
             };
-            btnExit.Click += (s, e) => { parent.OnExit(null, null); this.Close(); };
+            btnExit.Click += (s, e) => { this.Hide(); parent.OnExit(null, null); this.Close(); };
 
             this.AcceptButton = btnAction;
             this.CancelButton = btnCancel;
@@ -965,7 +970,7 @@ public class QuickActionForm : Form
                 Location = new Point(168, buttonY),
                 Size = new Size(70, 28)
             };
-            btnExit.Click += (s, e) => { parent.OnExit(null, null); this.Close(); };
+            btnExit.Click += (s, e) => { this.Hide(); parent.OnExit(null, null); this.Close(); };
 
             this.AcceptButton = btnAction;
             this.CancelButton = btnCancel;
