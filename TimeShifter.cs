@@ -1314,7 +1314,7 @@ public class QuickActionForm : Form
     // MDL2 Icon codes: https://docs.microsoft.com/en-us/windows/apps/design/style/segoe-ui-symbol-font
     private static Bitmap CreateUndoBitmap(int size, Color color)
     {
-        return CreateIconFromMDL2(size, color, "\uE7A7"); // Undo icon
+        return CreateIconFromMDL2(size, color, "\uE777"); // Undo icon
     }
 
     private static Bitmap CreateAddBitmap(int size, Color color)
@@ -1324,7 +1324,7 @@ public class QuickActionForm : Form
 
     private static Bitmap CreateForwardBitmap(int size, Color color)
     {
-        return CreateIconFromMDL2(size, color, "\uE72A"); // Forward arrow icon
+        return CreateIconFromMDL2(size, color, "\uECC5"); // Forward arrow icon
     }
 
     private static Bitmap CreateClockBitmapMDL2(int size, Color color)
