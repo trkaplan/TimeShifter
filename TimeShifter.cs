@@ -54,6 +54,7 @@ public class TimeShifter : Form
     private int shiftAmount = 12; // Varsayılan: 1 yıl (12 ay)
     private bool isShifted = false;
     private bool warningShown = false;
+    private bool isProcessing = false; // İşlem sürüyor mu?
     private QuickActionForm quickActionForm; // Tek instance için
 
     // QuickActionForm için public property'ler
@@ -62,6 +63,7 @@ public class TimeShifter : Form
     public int RemainingMinutes { get { return remainingMinutes; } set { remainingMinutes = value; } }
     public bool UntilEndOfDay { get { return untilEndOfDay; } }
     public bool WarningShown { get { return warningShown; } set { warningShown = value; } }
+    public bool IsProcessing { get { return isProcessing; } }
 
     // Renkler
     private readonly Color normalColor = Color.FromArgb(107, 114, 128); // Gri
@@ -320,6 +322,10 @@ public class TimeShifter : Form
 
         shiftAmount = months; // Seçilen ileri alma miktarını kaydet
 
+        // İşlem başladı
+        isProcessing = true;
+        NotifyFormStateChanged(); // Form açıksa disabled yap
+
         // İşlem popup'ı göster
         Form progressForm = ShowProgressForm("Saat ileri alınıyor...\nLütfen bekleyin.");
         Application.DoEvents();
@@ -371,13 +377,14 @@ public class TimeShifter : Form
             countdownTimer.Start();
             
             // Eğer form açıksa, state değişikliğini bildir
-            if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
-            {
-                quickActionForm.UpdateFormState();
-            }
+            NotifyFormStateChanged();
         }
         finally
         {
+            // İşlem bitti
+            isProcessing = false;
+            NotifyFormStateChanged(); // Form açıksa enabled yap
+
             // Popup'ı kapat
             if (progressForm != null)
             {
@@ -477,6 +484,10 @@ public class TimeShifter : Form
             return;
         }
 
+        // İşlem başladı
+        isProcessing = true;
+        NotifyFormStateChanged(); // Form açıksa disabled yap
+
         // İşlem popup'ı göster
         Form progressForm = ShowProgressForm("Saat geri alınıyor...\nLütfen bekleyin.");
         Application.DoEvents();
@@ -524,13 +535,14 @@ public class TimeShifter : Form
             UpdateTrayIcon();
             
             // Eğer form açıksa, state değişikliğini bildir
-            if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
-            {
-                quickActionForm.UpdateFormState();
-            }
+            NotifyFormStateChanged();
         }
         finally
         {
+            // İşlem bitti
+            isProcessing = false;
+            NotifyFormStateChanged(); // Form açıksa enabled yap
+
             // Popup'ı kapat (İşlem tamamlandı mesajından önce)
             if (progressForm != null)
             {
@@ -855,25 +867,31 @@ public class TimeShifter : Form
         }
     }
 
+    private void NotifyFormStateChanged()
+    {
+        if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
+        {
+            quickActionForm.UpdateFormState();
+        }
+    }
+
     private void ShowQuickActionForm()
     {
-        // Eğer form zaten açıksa, onu öne getir ve güncelle
+        // Form açıksa öne getir
         if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
         {
             quickActionForm.BringToFront();
             quickActionForm.Activate();
-            quickActionForm.UpdateFormState();
             return;
         }
 
-        // Form yoksa veya kapalıysa, yeni bir tane oluştur
+        // Eski formu temizle ve yenisini oluştur
         if (quickActionForm != null && !quickActionForm.IsDisposed)
         {
             quickActionForm.Dispose();
         }
-
         quickActionForm = new QuickActionForm(this);
-        quickActionForm.FormClosed += (s, e) => { quickActionForm = null; };
+        quickActionForm.FormClosed += (s, e) => quickActionForm = null;
         quickActionForm.Show();
     }
 
@@ -928,6 +946,8 @@ public class QuickActionForm : Form
     private static readonly Color IdleFormBg = Color.FromArgb(252, 252, 252);       // Form background
     private static readonly Color StatusPanelBg = Color.FromArgb(248, 250, 252);    // Status panel background
     private static readonly Color BorderColor = Color.FromArgb(229, 231, 235);      // Soft border
+    private static readonly Color DisabledBgColor = Color.FromArgb(243, 243, 243);  // Disabled background (light gray)
+    private static readonly Color DisabledTextColor = Color.FromArgb(161, 161, 161); // Disabled text (gray)
 
     public QuickActionForm(TimeShifter parent)
     {
@@ -1161,6 +1181,7 @@ public class QuickActionForm : Form
         btnCancel = CreateStyledButton("İptal", ButtonStyle.Neutral, 9);
         btnCancel.Size = new Size(80, 32); // Smaller for tertiary
         btnCancel.DialogResult = DialogResult.Cancel;
+        btnCancel.Click += (s, e) => { this.Close(); };
 
         if (isShifted)
         {
@@ -1236,6 +1257,61 @@ public class QuickActionForm : Form
                 this.Close();
             }
         };
+
+        // İşlem sürüyorsa formu disabled yap
+        UpdateFormEnabledState();
+    }
+
+    private void UpdateFormEnabledState()
+    {
+        bool enabled = !parent.IsProcessing;
+        
+        // Tüm kontrolleri enabled/disabled yap
+        if (gbShift != null) gbShift.Enabled = enabled;
+        if (gbDuration != null) gbDuration.Enabled = enabled;
+        if (btnPrimary != null)
+        {
+            btnPrimary.Enabled = enabled;
+            // Icon'u da güncelle
+            if (btnPrimary.Image != null)
+            {
+                btnPrimary.Image.Dispose();
+                btnPrimary.Image = null;
+                // Icon'u yeniden oluştur (disabled ise gri, enabled ise orijinal renk)
+                if (btnPrimary.Text == "Uzat")
+                {
+                    btnPrimary.Image = CreateAddBitmap(16, enabled ? Color.White : DisabledTextColor);
+                }
+                else if (btnPrimary.Text == "İleri Al")
+                {
+                    btnPrimary.Image = CreateForwardBitmap(16, enabled ? Color.White : DisabledTextColor);
+                }
+            }
+        }
+        if (btnSecondary != null)
+        {
+            btnSecondary.Enabled = enabled;
+            // Icon'u da güncelle
+            if (btnSecondary.Image != null)
+            {
+                btnSecondary.Image.Dispose();
+                btnSecondary.Image = null;
+                if (btnSecondary.Text == "Sıfırla")
+                {
+                    btnSecondary.Image = CreateUndoBitmap(16, enabled ? NeutralColor : DisabledTextColor);
+                }
+            }
+        }
+        if (btnCancel != null) btnCancel.Enabled = enabled;
+        
+        // Radio button'ları da disabled yap
+        if (rb1Month != null) rb1Month.Enabled = enabled;
+        if (rb3Months != null) rb3Months.Enabled = enabled;
+        if (rb1Year != null) rb1Year.Enabled = enabled;
+        if (rb10Min != null) rb10Min.Enabled = enabled;
+        if (rb30Min != null) rb30Min.Enabled = enabled;
+        if (rb2Hours != null) rb2Hours.Enabled = enabled;
+        if (rbUntilEndOfDay != null) rbUntilEndOfDay.Enabled = enabled;
     }
 
     // Button style enum
@@ -1278,12 +1354,38 @@ public class QuickActionForm : Form
                 break;
         }
 
+        // Disabled durumda renkleri güncelle
+        btn.EnabledChanged += (s, e) =>
+        {
+            if (!btn.Enabled)
+            {
+                // Disabled: Açık gri arka plan, gri metin
+                btn.BackColor = DisabledBgColor;
+                btn.ForeColor = DisabledTextColor;
+            }
+            else
+            {
+                // Enabled: Normal renkler
+                if (style == ButtonStyle.Primary)
+                {
+                    btn.BackColor = AccentColor;
+                    btn.ForeColor = Color.White;
+                }
+                else
+                {
+                    btn.BackColor = Color.White;
+                    btn.ForeColor = Color.FromArgb(55, 65, 81);
+                }
+            }
+            btn.Invalidate();
+        };
+
         // Task 9: Focus ring (handled via Paint for custom appearance)
         btn.GotFocus += (s, e) => btn.Invalidate();
         btn.LostFocus += (s, e) => btn.Invalidate();
         btn.Paint += (s, e) =>
         {
-            if (btn.Focused)
+            if (btn.Focused && btn.Enabled)
             {
                 var rect = btn.ClientRectangle;
                 rect.Inflate(-2, -2);
@@ -1499,6 +1601,9 @@ public class QuickActionForm : Form
                 lblStatusSecondary.Text = GetStatusSecondaryText();
             }
         }
+        
+        // İşlem durumuna göre formu enabled/disabled yap
+        UpdateFormEnabledState();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
