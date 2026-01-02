@@ -1,8 +1,17 @@
 // TimeShifter - System Tray Saat Değiştirici
 // Derlemek için: csc /target:winexe /win32icon:icon.ico TimeShifter.cs
-// Veya doğrudan çalıştır: dotnet script TimeShifter.cs
 
 using System;
+using System.Reflection;
+
+[assembly: AssemblyTitle("TimeShifter")]
+[assembly: AssemblyDescription("Windows system tray app to temporarily shift system clock forward")]
+[assembly: AssemblyCompany("Tuncay Kaplan")]
+[assembly: AssemblyProduct("TimeShifter")]
+[assembly: AssemblyCopyright("Copyright © 2026 Tuncay Kaplan - tuncaykaplan.com")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
 using System.Drawing;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -142,6 +151,7 @@ public class TimeShifter : Form
         
         trayMenu.Items.Add("Sıfırla", null, OnResetTime);
         trayMenu.Items.Add(new ToolStripSeparator());
+        trayMenu.Items.Add("Hakkında", null, OnAbout);
         trayMenu.Items.Add("Çıkış", null, OnExit);
 
         trayIcon = new NotifyIcon
@@ -727,6 +737,20 @@ public class TimeShifter : Form
                 process.WaitForExit(3000); // Maksimum 3 saniye bekle
         }
         catch { }
+    }
+
+    private void OnAbout(object sender, EventArgs e)
+    {
+        string version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+        MessageBox.Show(
+            "TimeShifter v" + version + "\n\n" +
+            "Windows sistem saatini geçici olarak ileri alan araç.\n\n" +
+            "© 2026 Tuncay Kaplan\n" +
+            "tuncaykaplan.com\n\n" +
+            "MIT Lisansı ile dağıtılmaktadır.",
+            "Hakkında - TimeShifter",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     public void OnExit(object sender, EventArgs e)
