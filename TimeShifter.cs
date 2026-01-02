@@ -140,7 +140,7 @@ public class TimeShifter : Form
         trayMenu.Items.Add("   Gün sonuna kadar", null, (s, e) => SetDuration(0, true));
         trayMenu.Items.Add(new ToolStripSeparator());
         
-        trayMenu.Items.Add("Saati Geri Al", null, OnResetTime);
+        trayMenu.Items.Add("Sıfırla", null, OnResetTime);
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("Çıkış", null, OnExit);
 
@@ -533,7 +533,17 @@ public class TimeShifter : Form
     {
         if (isShifted)
         {
-            string text = remainingMinutes > 0 ? remainingMinutes.ToString() : "!";
+            string text;
+            if (remainingMinutes <= 0)
+                text = "!";
+            else if (remainingMinutes <= 99)
+                text = remainingMinutes.ToString();
+            else
+            {
+                // 100+ dakika için saat cinsinden göster
+                int hours = (remainingMinutes + 30) / 60; // Yuvarlama
+                text = hours.ToString() + "s"; // "2s", "3s", vs.
+            }
             Color color = remainingMinutes <= 1 ? warningColor : shiftedColor;
             
             trayIcon.Icon = CreateIcon(color, text);
@@ -612,7 +622,9 @@ public class TimeShifter : Form
             // Metin
             if (!string.IsNullOrEmpty(text))
             {
-                using (Font font = new Font("Arial", 7, FontStyle.Bold))
+                // Font boyutunu karakter sayısına göre ayarla
+                float fontSize = text.Length <= 1 ? 9f : text.Length == 2 ? 7f : 5.5f;
+                using (Font font = new Font("Arial", fontSize, FontStyle.Bold))
                 using (SolidBrush textBrush = new SolidBrush(Color.White))
                 {
                     var textSize = g.MeasureString(text, font);
@@ -1109,7 +1121,7 @@ public class QuickActionForm : Form
             btnPrimary.TextImageRelation = TextImageRelation.ImageBeforeText;
 
             // Task 3: Secondary button - neutral style (not danger)
-            btnSecondary = CreateStyledButton("Geri Al", ButtonStyle.Neutral, 8);
+            btnSecondary = CreateStyledButton("Sıfırla", ButtonStyle.Neutral, 8);
             btnSecondary.Click += (s, e) =>
             {
                 // UX: Onay al
