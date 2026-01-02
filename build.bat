@@ -28,7 +28,7 @@ if not exist "%CSC_PATH%" (
 )
 
 :: Derle
-"%CSC_PATH%" /target:winexe /out:TimeShifter.exe TimeShifter.cs
+"%CSC_PATH%" /target:winexe /win32icon:icon.ico /out:TimeShifter.exe TimeShifter.cs
 
 if exist TimeShifter.exe (
     echo.
