@@ -415,8 +415,9 @@ public class TimeShifter : Form
     {
         trayIcon.Icon = CreateIcon(warningColor, "1");
         
+        string extendPreview = untilEndOfDay ? "gün sonuna kadar" : string.Format("+{0} dakika", defaultMinutes);
         var result = MessageBox.Show(
-            "Saat 1 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz?",
+            string.Format("Saat 1 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz? ({0})", extendPreview),
             "TimeShifter - Süre Bitiyor",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
@@ -425,7 +426,7 @@ public class TimeShifter : Form
 
         if (result == DialogResult.Yes)
         {
-            // Süreyi uzat
+            // ADDITIVE: Süreyi mevcut kalan süreye EKLE
             if (untilEndOfDay)
             {
                 DateTime now = DateTime.Now;
@@ -434,14 +435,14 @@ public class TimeShifter : Form
             }
             else
             {
-                remainingMinutes = defaultMinutes;
+                remainingMinutes += defaultMinutes; // Toplama işlemi
             }
             warningShown = false;
             UpdateTrayIcon();
             
-            string extendText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika", defaultMinutes);
+            string extendText = untilEndOfDay ? "gün sonuna kadar" : string.Format("+{0} dakika", defaultMinutes);
             MessageBox.Show(
-                string.Format("Süre {0} uzatıldı.", extendText),
+                string.Format("Süreye {0} eklendi.\nYeni kalan süre: {1} dakika", extendText, remainingMinutes),
                 "TimeShifter",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1023,7 +1024,7 @@ public class QuickActionForm : Form
         // Reset/Uzatma süresi seçenekleri - Task 4 & 5: Fixed layout
         // Task 5: Fixed height to prevent layout jump (includes space for helper text)
         int durationHeight = isShifted ? 120 : 110;
-        gbDuration = CreateStyledGroupBox(isShifted ? "Sıfırlamayı ertele" : "Sıfırlama süresi", startY, durationHeight);
+        gbDuration = CreateStyledGroupBox(isShifted ? "Süreyi uzat" : "Sıfırlama süresi", startY, durationHeight);
 
         // Task 4: Manual layout for perfect alignment
         int baseY = isShifted ? 18 : 24;
@@ -1031,12 +1032,12 @@ public class QuickActionForm : Form
         int durCol2X = 175;
         int rowSpacing = 28;
 
-        // Subtitle for active state
+        // Subtitle for active state - ADDITIVE davranışı açıkça belirt
         if (isShifted)
         {
             var lblDurationSubtitle = new Label
             {
-                Text = "Mevcut ileri alınmış süreyi uzatır",
+                Text = "Seçilen süre kalan süreye eklenir",
                 AutoSize = true,
                 ForeColor = SystemColors.GrayText,
                 Location = new Point(durCol1X, baseY),
@@ -1047,9 +1048,11 @@ public class QuickActionForm : Form
         }
 
         // Radio buttons with fixed positions (Task 4)
-        rb10Min = CreateStyledRadioButton("10 dakika", durCol1X, baseY, !isShifted, 3);
-        rb2Hours = CreateStyledRadioButton("2 saat", durCol2X, baseY, false, 5);
-        rb30Min = CreateStyledRadioButton("30 dakika", durCol1X, baseY + rowSpacing, isShifted, 4);
+        // isShifted durumunda "+" prefix ile ADDITIVE davranışı göster
+        string prefix = isShifted ? "+" : "";
+        rb10Min = CreateStyledRadioButton(prefix + "10 dakika", durCol1X, baseY, !isShifted, 3);
+        rb2Hours = CreateStyledRadioButton(prefix + "2 saat", durCol2X, baseY, false, 5);
+        rb30Min = CreateStyledRadioButton(prefix + "30 dakika", durCol1X, baseY + rowSpacing, isShifted, 4);
         rbUntilEndOfDay = CreateStyledRadioButton("Gün sonuna kadar", durCol2X, baseY + rowSpacing, false, 6);
 
         gbDuration.Controls.Add(rb10Min);
@@ -1372,11 +1375,18 @@ public class QuickActionForm : Form
         int minutes = rbUntilEndOfDay.Checked ? 0 : (rb2Hours.Checked ? 120 : (rb30Min.Checked ? 30 : 10));
         bool untilEnd = rbUntilEndOfDay.Checked;
 
-        // Reset süresini ayarla ve uzat
+        // Reset süresini ayarla
         parent.SetDuration(minutes, untilEnd);
-        parent.RemainingMinutes = untilEnd ? 
-            (int)(DateTime.Now.Date.AddDays(1).AddSeconds(-1) - DateTime.Now).TotalMinutes : 
-            minutes;
+        
+        // ADDITIVE: Seçilen süreyi mevcut kalan süreye EKLE
+        if (untilEnd)
+        {
+            parent.RemainingMinutes = (int)(DateTime.Now.Date.AddDays(1).AddSeconds(-1) - DateTime.Now).TotalMinutes;
+        }
+        else
+        {
+            parent.RemainingMinutes += minutes; // Toplama işlemi
+        }
         parent.WarningShown = false;
         parent.UpdateTrayIcon();
     }
