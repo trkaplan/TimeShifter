@@ -41,11 +41,6 @@ Download the latest `TimeShifter.exe` from [Releases](../../releases).
 build.bat
 ```
 
-### Option 3: Manual Compilation
-```batch
-csc /target:winexe /out:TimeShifter.exe TimeShifter.cs
-```
-
 ## How It Works
 
 1. Stops the Windows Time service to prevent auto-sync
