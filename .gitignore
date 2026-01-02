@@ -1,0 +1,22 @@
+# Build outputs
+*.exe
+*.dll
+*.pdb
+*.cache
+
+# IDE
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development notes
+docs/
+agent.md
+ss/
