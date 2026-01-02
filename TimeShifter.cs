@@ -4,9 +4,13 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.IO.Pipes;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -20,6 +24,46 @@ using Microsoft.Win32;
 
 public class TimeShifter : Form
 {
+    private static PipeSecurity CreateActivationPipeSecurity()
+    {
+        // Default DACL under elevation can block non-elevated clients (same user).
+        // Be explicit: allow current user + authenticated users to connect/write.
+        var security = new PipeSecurity();
+
+        try
+        {
+            SecurityIdentifier currentUserSid = WindowsIdentity.GetCurrent().User;
+            if (currentUserSid != null)
+            {
+                security.AddAccessRule(new PipeAccessRule(
+                    currentUserSid,
+                    PipeAccessRights.ReadWrite,
+                    AccessControlType.Allow));
+            }
+        }
+        catch { }
+
+        try
+        {
+            security.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null),
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+        }
+        catch { }
+
+        try
+        {
+            security.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+                PipeAccessRights.FullControl,
+                AccessControlType.Allow));
+        }
+        catch { }
+
+        return security;
+    }
+
     // Win32 API for setting system time
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool SetSystemTime(ref SYSTEMTIME st);
@@ -30,6 +74,9 @@ public class TimeShifter : Form
     // NotifyIcon için Icon handle cleanup (GDI leak önleme)
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr hIcon);
+
+    // Single-instance activation: elevated instance'a güvenli sinyal (UIPI engeline takılmaz)
+    private const string ActivationPipeName = "TimeShifter.SingleInstance.Activate";
 
     // Windows 11 tray icon "always show" ayarı OS tarafından yönetilir; kodla zorlamak mümkün değil.
     // Ama kullanıcıya sabitleme yönergesini (tek seferlik) gösterebiliriz.
@@ -56,6 +103,10 @@ public class TimeShifter : Form
     private bool warningShown = false;
     private bool isProcessing = false; // İşlem sürüyor mu?
     private QuickActionForm quickActionForm; // Tek instance için
+    private Thread activationListenerThread;
+    private volatile bool activationListenerStopRequested;
+    private NamedPipeServerStream activationPipeServer;
+    private DateTime lastActivationNoticeUtc = DateTime.MinValue;
 
     // QuickActionForm için public property'ler
     public bool IsShifted { get { return isShifted; } }
@@ -80,6 +131,7 @@ public class TimeShifter : Form
             this.Visible = false;
             // Başlangıçta QuickActionForm'u göster
             ShowQuickActionForm();
+            StartActivationListener();
         };
 
         // Admin kontrolü
@@ -92,6 +144,101 @@ public class TimeShifter : Form
 
         InitializeTray();
         InitializeTimer();
+    }
+
+    private void StartActivationListener()
+    {
+        if (activationListenerThread != null)
+            return;
+
+        activationListenerThread = new Thread(() =>
+        {
+            while (!activationListenerStopRequested)
+            {
+                try
+                {
+                    PipeSecurity security = null;
+                    try
+                    {
+                        security = CreateActivationPipeSecurity();
+                    }
+                    catch { }
+
+                    using (var server = new NamedPipeServerStream(
+                        ActivationPipeName,
+                        PipeDirection.In,
+                        1,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.None,
+                        0,
+                        0,
+                        security))
+                    {
+                        activationPipeServer = server;
+                        server.WaitForConnection();
+
+                        if (activationListenerStopRequested)
+                            return;
+
+                        // Client tarafı WriteLine yapıyor. Burada en az 1 satır okuyup pipe'ı erken kapatmazsak
+                        // client "Kanal kesik" (broken pipe) alıp retry'a giriyor ve balon defalarca tetikleniyor.
+                        try
+                        {
+                            using (var reader = new StreamReader(server))
+                            {
+                                reader.ReadLine();
+                            }
+                        }
+                        catch { }
+
+                        try
+                        {
+                            BeginInvoke((Action)(() =>
+                            {
+                                if ((DateTime.UtcNow - lastActivationNoticeUtc).TotalMilliseconds < 2000)
+                                    return;
+
+                                lastActivationNoticeUtc = DateTime.UtcNow;
+                                ShowTransientNotification("TimeShifter zaten çalışıyor.");
+                            }));
+                        }
+                        catch
+                        {
+                            // Form/handle kapanıyorsa Invoke başarısız olabilir; sessizce yut.
+                        }
+
+                        // İstemci bir şey yazmasa bile bağlantıyı ping olarak kabul ediyoruz.
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    if (activationListenerStopRequested)
+                        return;
+                }
+                catch (IOException)
+                {
+                    // Pipe hatası: yeniden dene.
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(200);
+                }
+            }
+        });
+
+        activationListenerThread.IsBackground = true;
+        activationListenerThread.Start();
+    }
+
+    private void StopActivationListener()
+    {
+        activationListenerStopRequested = true;
+        try
+        {
+            if (activationPipeServer != null)
+                activationPipeServer.Dispose();
+        }
+        catch { }
     }
 
     private bool IsRunAsAdmin()
@@ -846,6 +993,8 @@ public class TimeShifter : Form
 
     private void CleanupResources()
     {
+        StopActivationListener();
+
         if (countdownTimer != null)
         {
             countdownTimer.Stop();
@@ -897,12 +1046,160 @@ public class TimeShifter : Form
 
     private void ShowNotification(string message, ToolTipIcon icon = ToolTipIcon.Info)
     {
-        if (trayIcon != null)
+        if (trayIcon == null)
+            return;
+
+        trayIcon.BalloonTipTitle = "TimeShifter";
+        trayIcon.BalloonTipText = message;
+        trayIcon.BalloonTipIcon = icon;
+        trayIcon.ShowBalloonTip(3500); // 3.5 saniye
+    }
+
+    private void ShowTransientNotification(string message)
+    {
+        try
         {
-            trayIcon.BalloonTipTitle = "TimeShifter";
-            trayIcon.BalloonTipText = message;
-            trayIcon.BalloonTipIcon = icon;
-            trayIcon.ShowBalloonTip(3500); // 3.5 saniye
+            var toast = new TransientNotificationForm(message, 1600);
+            toast.FormClosed += (s, e) =>
+            {
+                try { toast.Dispose(); } catch { }
+            };
+            toast.Show();
+        }
+        catch
+        {
+        }
+    }
+
+    private sealed class TransientNotificationForm : Form
+    {
+        private readonly System.Windows.Forms.Timer closeTimer;
+        private readonly Label messageLabel;
+
+        public TransientNotificationForm(string message, int durationMs)
+        {
+            ShowInTaskbar = false;
+            FormBorderStyle = FormBorderStyle.None;
+            StartPosition = FormStartPosition.Manual;
+            TopMost = true;
+            BackColor = Color.FromArgb(32, 32, 32);
+            ForeColor = Color.White;
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            Padding = new Padding(12, 10, 12, 10);
+
+            messageLabel = new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(320, 0),
+                Text = message,
+                ForeColor = ForeColor,
+                BackColor = Color.Transparent
+            };
+            messageLabel.Location = new Point(Padding.Left, Padding.Top);
+            Controls.Add(messageLabel);
+
+            closeTimer = new System.Windows.Forms.Timer();
+            closeTimer.Interval = Math.Max(300, durationMs);
+            closeTimer.Tick += (s, e) =>
+            {
+                closeTimer.Stop();
+                Close();
+            };
+        }
+
+        protected override bool ShowWithoutActivation
+        {
+            get { return true; }
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                const int WS_EX_TOOLWINDOW = 0x00000080;
+                const int WS_EX_TOPMOST = 0x00000008;
+                const int WS_EX_NOACTIVATE = 0x08000000;
+
+                var cp = base.CreateParams;
+                cp.ExStyle |= WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+                return cp;
+            }
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            var labelSize = messageLabel.GetPreferredSize(new Size(320, 0));
+            ClientSize = new Size(
+                labelSize.Width + Padding.Horizontal,
+                labelSize.Height + Padding.Vertical);
+
+            var workArea = Screen.PrimaryScreen.WorkingArea;
+            Location = new Point(
+                workArea.Right - Width - 12,
+                workArea.Bottom - Height - 12);
+
+            closeTimer.Start();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (closeTimer != null)
+                {
+                    closeTimer.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
+    }
+
+    // Single-instance: Mutex adı (Global namespace kullanarak tüm kullanıcılar için)
+    private const string MutexName = "Global\\TimeShifter.SingleInstance.Mutex";
+
+    private static bool IsAnotherInstanceRunning()
+    {
+        try
+        {
+            using (Mutex.OpenExisting(MutexName))
+            {
+                return true;
+            }
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Mutex var ama erişemiyorsak da başka instance çalışıyor varsayalım.
+            return true;
+        }
+    }
+
+    private static void SignalExistingInstance()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            try
+            {
+                using (var client = new NamedPipeClientStream(".", ActivationPipeName, PipeDirection.Out))
+                {
+                    client.Connect(200);
+                    using (var writer = new StreamWriter(client))
+                    {
+                        writer.AutoFlush = true;
+                        writer.WriteLine("activate");
+                    }
+                }
+                return;
+            }
+            catch
+            {
+                Thread.Sleep(100);
+            }
         }
     }
 
@@ -912,16 +1209,44 @@ public class TimeShifter : Form
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
+        // Başka instance çalışıyorsa mevcut instance'a ping at ve çık (UAC istemeden).
+        if (IsAnotherInstanceRunning())
+        {
+            SignalExistingInstance();
+            return;
+        }
+
         // Admin değilsek: form/message-loop başlatmadan UAC ile yeniden çalıştır ve çık.
         // Bu, task manager'da "process kaldı" problemini çözer (ilk non-admin proses).
         if (!IsRunAsAdminStatic())
         {
             RestartAsAdminStatic();
-            Environment.Exit(0);
             return;
         }
 
-        Application.Run(new TimeShifter());
+        bool createdNew;
+        Mutex mutex = null;
+        try
+        {
+            mutex = new Mutex(true, MutexName, out createdNew);
+            if (!createdNew)
+            {
+                mutex.Dispose();
+                mutex = null;
+                SignalExistingInstance();
+                return;
+            }
+
+            Application.Run(new TimeShifter());
+        }
+        finally
+        {
+            if (mutex != null)
+            {
+                try { mutex.ReleaseMutex(); } catch { }
+                mutex.Dispose();
+            }
+        }
     }
 }
 
