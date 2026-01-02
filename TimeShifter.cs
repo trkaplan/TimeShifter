@@ -463,7 +463,7 @@ public class TimeShifter : Form
     {
         if (isShifted)
         {
-            MessageBox.Show("Saat zaten ileri alınmış!", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Sistem saati zaten ileri alınmış!", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -474,7 +474,7 @@ public class TimeShifter : Form
         NotifyFormStateChanged(); // Form açıksa disabled yap
 
         // İşlem popup'ı göster
-        Form progressForm = ShowProgressForm("Saat ileri alınıyor...\nLütfen bekleyin.");
+        Form progressForm = ShowProgressForm("Sistem saati ileri alınıyor...\nLütfen bekleyin.");
         Application.DoEvents();
 
         try
@@ -550,7 +550,7 @@ public class TimeShifter : Form
         string shiftText = months == 12 ? "1 yıl" : months == 3 ? "3 ay" : "1 ay";
         string resetText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika", remainingMinutes);
         ShowNotification(
-            string.Format("Saat {0} ileri alındı\nOtomatik geri alma: {1}", shiftText, resetText),
+            string.Format("Sistem saati {0} ileri alındı\nOtomatik geri alma: {1}", shiftText, resetText),
             ToolTipIcon.Info);
     }
 
@@ -592,7 +592,7 @@ public class TimeShifter : Form
         
         string extendPreview = untilEndOfDay ? "gün sonuna kadar" : string.Format("+{0} dakika", defaultMinutes);
         var result = MessageBox.Show(
-            string.Format("Saat 1 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz? ({0})", extendPreview),
+            string.Format("Sistem saati 1 dakika içinde geri alınacak.\n\nSüreyi uzatmak ister misiniz? ({0})", extendPreview),
             "TimeShifter - Süre Bitiyor",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
@@ -628,7 +628,7 @@ public class TimeShifter : Form
     {
         if (!isShifted)
         {
-            MessageBox.Show("Saat zaten normal durumda.", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Sistem saati zaten normal durumda.", "TimeShifter", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -637,7 +637,7 @@ public class TimeShifter : Form
         NotifyFormStateChanged(); // Form açıksa disabled yap
 
         // İşlem popup'ı göster
-        Form progressForm = ShowProgressForm("Saat geri alınıyor...\nLütfen bekleyin.");
+        Form progressForm = ShowProgressForm("Sistem saati geri alınıyor...\nLütfen bekleyin.");
         Application.DoEvents();
 
         try
@@ -707,7 +707,7 @@ public class TimeShifter : Form
         });
         
         // Tamamlandı bildirimi
-        ShowNotification("Saat geri alındı ve senkronize edildi.", ToolTipIcon.Info);
+        ShowNotification("Sistem saati geri alındı ve senkronize edildi.", ToolTipIcon.Info);
     }
 
     public void UpdateTrayIcon()
@@ -731,7 +731,7 @@ public class TimeShifter : Form
             
             string shiftText = shiftAmount == 12 ? "1 yıl" : shiftAmount == 3 ? "3 ay" : "1 ay";
             string timeText = untilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dk kaldı", remainingMinutes);
-            trayIcon.Text = string.Format("TimeShifter - {0}\nSaat {1} ileri", timeText, shiftText);
+            trayIcon.Text = string.Format("TimeShifter - {0}\nSistem saati {1} ileri", timeText, shiftText);
             
             // Menü öğelerini devre dışı bırak
             for (int i = 0; i < 3; i++)
@@ -945,7 +945,7 @@ public class TimeShifter : Form
             var owner = GetDialogOwner();
             var result = MessageBox.Show(
                 owner,
-                "Saat hâlâ ileri alınmış durumda!\n\nÇıkmadan önce geri almak ister misiniz?",
+                "Sistem saati ileri alınmış durumda!\n\nÇıkmadan önce geri almak ister misiniz?",
                 "TimeShifter",
                 MessageBoxButtons.YesNoCancel,
                 MessageBoxIcon.Warning);
@@ -1465,7 +1465,7 @@ public class QuickActionForm : Form
                 // UX: Onay al
                 var result = MessageBox.Show(
                     "Sistem saati normale dönecek. Devam etmek istiyor musunuz?",
-                    "Saat geri alınacak",
+                    "Sistem saati geri alınacak",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question,
                     MessageBoxDefaultButton.Button2);
@@ -1768,14 +1768,14 @@ public class QuickActionForm : Form
         if (!isShifted) return "";
         string shiftText = parent.ShiftAmount == 12 ? "1 yıl" : parent.ShiftAmount == 3 ? "3 ay" : "1 ay";
         string timeText = parent.UntilEndOfDay ? "Gün sonuna kadar" : string.Format("{0} dakika kaldı", parent.RemainingMinutes);
-        return string.Format("Durum: Saat {0} ileri\n{1}", shiftText, timeText);
+        return string.Format("Durum: Sistem saati {0} ileri\n{1}", shiftText, timeText);
     }
 
     private string GetStatusPrimaryText()
     {
         if (!isShifted) return "";
         string shiftText = parent.ShiftAmount == 12 ? "1 yıl" : parent.ShiftAmount == 3 ? "3 ay" : "1 ay";
-        return string.Format("Saat {0} ileri alındı", shiftText);
+        return string.Format("Sistem saati {0} ileri alındı", shiftText);
     }
 
     private string GetStatusSecondaryText()

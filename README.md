@@ -68,8 +68,8 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 ## Özellikler
 
 - **Tray İkon Durumu**:
-  - Gri: Saat normal
-  - Kırmızı (geri sayım ile): Saat ileri alınmış
+  - Gri: Sistem saati normal
+  - Kırmızı (geri sayım ile): Sistem saati ileri alınmış
   - Sarı: 1 dakika kaldı uyarısı
 
 - **İleri Alma Seçenekleri**: 1 ay, 3 ay veya 1 yıl
@@ -77,7 +77,7 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 - **Hızlı Erişim Paneli**: Tray ikonuna sol tıklayarak ayarlar panelini açın
 - **Akıllı Uyarı**: Sıfırlamadan 1 dakika önce uzatma seçeneği sunar
 - **Toplamalı Uzatma**: Süre uzatıldığında seçilen süre kalan süreye eklenir
-- **Güvenli Çıkış**: Saat hâlâ ilerideyse çıkışta uyarı verir
+- **Güvenli Çıkış**: Sistem saati hâlâ ilerideyse çıkışta uyarı verir
 
 ## Kullanım
 
