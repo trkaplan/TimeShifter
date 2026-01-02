@@ -926,11 +926,25 @@ public class TimeShifter : Form
             MessageBoxOptions.DefaultDesktopOnly);
     }
 
+    private IWin32Window GetDialogOwner()
+    {
+        try
+        {
+            if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
+                return quickActionForm;
+        }
+        catch { }
+
+        return this;
+    }
+
     public void OnExit(object sender, EventArgs e)
     {
         if (isShifted)
         {
+            var owner = GetDialogOwner();
             var result = MessageBox.Show(
+                owner,
                 "Saat hâlâ ileri alınmış durumda!\n\nÇıkmadan önce geri almak ister misiniz?",
                 "TimeShifter",
                 MessageBoxButtons.YesNoCancel,
