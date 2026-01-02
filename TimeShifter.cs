@@ -127,22 +127,22 @@ public class TimeShifter : Form
         trayMenu = new ContextMenuStrip();
         
         // İleri alma seçenekleri
-        trayMenu.Items.Add("⏩ İleri Al: 1 Yıl", null, (s, e) => OnShiftForward(12));
-        trayMenu.Items.Add("⏩ İleri Al: 3 Ay", null, (s, e) => OnShiftForward(3));
-        trayMenu.Items.Add("⏩ İleri Al: 1 Ay", null, (s, e) => OnShiftForward(1));
+        trayMenu.Items.Add("İleri Al: 1 yıl", null, (s, e) => OnShiftForward(12));
+        trayMenu.Items.Add("İleri Al: 3 ay", null, (s, e) => OnShiftForward(3));
+        trayMenu.Items.Add("İleri Al: 1 ay", null, (s, e) => OnShiftForward(1));
         trayMenu.Items.Add(new ToolStripSeparator());
         
         // Reset süresi seçenekleri
-        trayMenu.Items.Add("⏱️ Sıfırlama Süresi: 10 dk", null, null).Enabled = false;
+        trayMenu.Items.Add("Sıfırlama süresi: 10 dk", null, null).Enabled = false;
         trayMenu.Items.Add("   10 dakika", null, (s, e) => SetDuration(10, false));
         trayMenu.Items.Add("   30 dakika", null, (s, e) => SetDuration(30, false));
         trayMenu.Items.Add("   2 saat", null, (s, e) => SetDuration(120, false));
         trayMenu.Items.Add("   Gün sonuna kadar", null, (s, e) => SetDuration(0, true));
         trayMenu.Items.Add(new ToolStripSeparator());
         
-        trayMenu.Items.Add("🔄 Saati Geri Al", null, OnResetTime);
+        trayMenu.Items.Add("Saati Geri Al", null, OnResetTime);
         trayMenu.Items.Add(new ToolStripSeparator());
-        trayMenu.Items.Add("❌ Çıkış", null, OnExit);
+        trayMenu.Items.Add("Çıkış", null, OnExit);
 
         trayIcon = new NotifyIcon
         {
@@ -284,7 +284,7 @@ public class TimeShifter : Form
         untilEndOfDay = untilEndOfDayMode;
         
         string durationText = untilEndOfDayMode ? "Gün sonuna kadar" : string.Format("{0} dk", minutes);
-        ((ToolStripMenuItem)trayMenu.Items[4]).Text = string.Format("⏱️ Sıfırlama Süresi: {0}", durationText);
+        ((ToolStripMenuItem)trayMenu.Items[4]).Text = string.Format("Sıfırlama süresi: {0}", durationText);
         
         // Tick işareti güncelle
         for (int i = 5; i <= 8; i++)
