@@ -2,23 +2,21 @@
 // Derlemek için: csc /target:winexe /win32icon:icon.ico TimeShifter.cs
 
 using System;
+using System.Diagnostics;
+using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Windows.Forms;
+using Microsoft.Win32;
 
 [assembly: AssemblyTitle("TimeShifter")]
 [assembly: AssemblyDescription("Windows system tray app to temporarily shift system clock forward")]
-[assembly: AssemblyCompany("Tuncay Kaplan")]
+[assembly: AssemblyCompany("T.K.")]
 [assembly: AssemblyProduct("TimeShifter")]
 [assembly: AssemblyCopyright("Copyright © 2026 Tuncay Kaplan - tuncaykaplan.com")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
-
-using System.Drawing;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
-using System.Diagnostics;
-using System.Security.Principal;
-using Microsoft.Win32;
 
 public class TimeShifter : Form
 {
@@ -56,6 +54,7 @@ public class TimeShifter : Form
     private int shiftAmount = 12; // Varsayılan: 1 yıl (12 ay)
     private bool isShifted = false;
     private bool warningShown = false;
+    private QuickActionForm quickActionForm; // Tek instance için
 
     // QuickActionForm için public property'ler
     public bool IsShifted { get { return isShifted; } }
@@ -370,6 +369,12 @@ public class TimeShifter : Form
             // UI güncelle
             UpdateTrayIcon();
             countdownTimer.Start();
+            
+            // Eğer form açıksa, state değişikliğini bildir
+            if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
+            {
+                quickActionForm.UpdateFormState();
+            }
         }
         finally
         {
@@ -517,6 +522,12 @@ public class TimeShifter : Form
             untilEndOfDay = false;
 
             UpdateTrayIcon();
+            
+            // Eğer form açıksa, state değişikliğini bildir
+            if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
+            {
+                quickActionForm.UpdateFormState();
+            }
         }
         finally
         {
@@ -750,7 +761,9 @@ public class TimeShifter : Form
             "MIT Lisansı ile dağıtılmaktadır.",
             "Hakkında - TimeShifter",
             MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+            MessageBoxIcon.Information,
+            MessageBoxDefaultButton.Button1,
+            MessageBoxOptions.DefaultDesktopOnly);
     }
 
     public void OnExit(object sender, EventArgs e)
@@ -844,10 +857,24 @@ public class TimeShifter : Form
 
     private void ShowQuickActionForm()
     {
-        using (QuickActionForm form = new QuickActionForm(this))
+        // Eğer form zaten açıksa, onu öne getir ve güncelle
+        if (quickActionForm != null && !quickActionForm.IsDisposed && quickActionForm.Visible)
         {
-            form.ShowDialog();
+            quickActionForm.BringToFront();
+            quickActionForm.Activate();
+            quickActionForm.UpdateFormState();
+            return;
         }
+
+        // Form yoksa veya kapalıysa, yeni bir tane oluştur
+        if (quickActionForm != null && !quickActionForm.IsDisposed)
+        {
+            quickActionForm.Dispose();
+        }
+
+        quickActionForm = new QuickActionForm(this);
+        quickActionForm.FormClosed += (s, e) => { quickActionForm = null; };
+        quickActionForm.Show();
     }
 
     private void ShowNotification(string message, ToolTipIcon icon = ToolTipIcon.Info)
@@ -1425,6 +1452,53 @@ public class QuickActionForm : Form
         }
         parent.WarningShown = false;
         parent.UpdateTrayIcon();
+    }
+
+    public void UpdateFormState()
+    {
+        // State değiştiyse, formu yeniden oluştur
+        bool newIsShifted = parent.IsShifted;
+        if (newIsShifted != isShifted)
+        {
+            // State değişti, formu yeniden oluştur
+            this.isShifted = newIsShifted;
+            
+            // Tüm kontrolleri temizle
+            this.Controls.Clear();
+            if (statusPanel != null)
+            {
+                statusPanel.Dispose();
+                statusPanel = null;
+            }
+            if (gbShift != null)
+            {
+                gbShift.Dispose();
+                gbShift = null;
+            }
+            if (gbDuration != null)
+            {
+                gbDuration.Dispose();
+                gbDuration = null;
+            }
+            if (uiTimer != null)
+            {
+                uiTimer.Stop();
+                uiTimer.Dispose();
+                uiTimer = null;
+            }
+            
+            // Formu yeniden oluştur
+            InitializeForm();
+        }
+        else
+        {
+            // State aynı, sadece status bilgilerini güncelle
+            if (isShifted && lblStatusPrimary != null && lblStatusSecondary != null)
+            {
+                lblStatusPrimary.Text = GetStatusPrimaryText();
+                lblStatusSecondary.Text = GetStatusSecondaryText();
+            }
+        }
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
