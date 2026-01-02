@@ -199,7 +199,7 @@ public class TimeShifter : Form
                                     return;
 
                                 lastActivationNoticeUtc = DateTime.UtcNow;
-                                ShowTransientNotification("TimeShifter zaten çalışıyor.");
+                                ShowNotification("TimeShifter zaten çalışıyor.", ToolTipIcon.Info);
                             }));
                         }
                         catch
@@ -614,13 +614,8 @@ public class TimeShifter : Form
             }
             warningShown = false;
             UpdateTrayIcon();
-            
-            string extendText = untilEndOfDay ? "gün sonuna kadar" : string.Format("+{0} dakika", defaultMinutes);
-            MessageBox.Show(
-                string.Format("Süreye {0} eklendi.\nYeni kalan süre: {1} dakika", extendText, remainingMinutes),
-                "TimeShifter",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+
+            ShowDurationExtendedToast(defaultMinutes, untilEndOfDay);
         }
         else
         {
@@ -1061,105 +1056,31 @@ public class TimeShifter : Form
         trayIcon.ShowBalloonTip(3500); // 3.5 saniye
     }
 
-    private void ShowTransientNotification(string message)
+    public void ShowDurationExtendedToast(int addedMinutes, bool extendedToEndOfDay)
     {
-        try
-        {
-            var toast = new TransientNotificationForm(message, 1600);
-            toast.FormClosed += (s, e) =>
-            {
-                try { toast.Dispose(); } catch { }
-            };
-            toast.Show();
-        }
-        catch
-        {
-        }
+        string addedText = extendedToEndOfDay
+            ? "Süre gün sonuna kadar uzatıldı."
+            : string.Format("Süre +{0} dk uzatıldı.", addedMinutes);
+
+        string totalText = string.Format("Toplam kalan süre: {0}", FormatRemainingMinutes(remainingMinutes));
+        ShowNotification(addedText + "\n" + totalText, ToolTipIcon.Info);
     }
 
-    private sealed class TransientNotificationForm : Form
+    private static string FormatRemainingMinutes(int totalMinutes)
     {
-        private readonly System.Windows.Forms.Timer closeTimer;
-        private readonly Label messageLabel;
+        if (totalMinutes <= 0)
+            return "0 dk";
 
-        public TransientNotificationForm(string message, int durationMs)
-        {
-            ShowInTaskbar = false;
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.Manual;
-            TopMost = true;
-            BackColor = Color.FromArgb(32, 32, 32);
-            ForeColor = Color.White;
-            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            Padding = new Padding(12, 10, 12, 10);
+        int hours = totalMinutes / 60;
+        int minutes = totalMinutes % 60;
 
-            messageLabel = new Label
-            {
-                AutoSize = true,
-                MaximumSize = new Size(320, 0),
-                Text = message,
-                ForeColor = ForeColor,
-                BackColor = Color.Transparent
-            };
-            messageLabel.Location = new Point(Padding.Left, Padding.Top);
-            Controls.Add(messageLabel);
+        if (hours <= 0)
+            return string.Format("{0} dk", totalMinutes);
 
-            closeTimer = new System.Windows.Forms.Timer();
-            closeTimer.Interval = Math.Max(300, durationMs);
-            closeTimer.Tick += (s, e) =>
-            {
-                closeTimer.Stop();
-                Close();
-            };
-        }
+        if (minutes == 0)
+            return string.Format("{0} saat", hours);
 
-        protected override bool ShowWithoutActivation
-        {
-            get { return true; }
-        }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                const int WS_EX_TOOLWINDOW = 0x00000080;
-                const int WS_EX_TOPMOST = 0x00000008;
-                const int WS_EX_NOACTIVATE = 0x08000000;
-
-                var cp = base.CreateParams;
-                cp.ExStyle |= WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
-                return cp;
-            }
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
-
-            var labelSize = messageLabel.GetPreferredSize(new Size(320, 0));
-            ClientSize = new Size(
-                labelSize.Width + Padding.Horizontal,
-                labelSize.Height + Padding.Vertical);
-
-            var workArea = Screen.PrimaryScreen.WorkingArea;
-            Location = new Point(
-                workArea.Right - Width - 12,
-                workArea.Bottom - Height - 12);
-
-            closeTimer.Start();
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                if (closeTimer != null)
-                {
-                    closeTimer.Dispose();
-                }
-            }
-            base.Dispose(disposing);
-        }
+        return string.Format("{0} saat {1} dk", hours, minutes);
     }
 
     // Single-instance: Mutex adı (Global namespace kullanarak tüm kullanıcılar için)
@@ -1885,6 +1806,7 @@ public class QuickActionForm : Form
         }
         parent.WarningShown = false;
         parent.UpdateTrayIcon();
+        parent.ShowDurationExtendedToast(minutes, untilEnd);
     }
 
     public void UpdateFormState()
