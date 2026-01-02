@@ -483,27 +483,33 @@ public class TimeShifter : Form
             StopTimeService();
             Application.DoEvents();
 
-            // Saati kaydet ve ileri al
-            originalTime = DateTime.UtcNow;
-            
+            // Saati kaydet ve ileri al - GetSystemTime'dan tutarlı kaynak kullan
             SYSTEMTIME st = new SYSTEMTIME();
             GetSystemTime(ref st);
-            
-            // Ay ekle
-            int newMonth = st.wMonth + months;
-            int newYear = st.wYear;
-            while (newMonth > 12)
-            {
-                newMonth -= 12;
-                newYear++;
-            }
-            
-            st.wYear = (ushort)newYear;
-            st.wMonth = (ushort)newMonth;
+
+            // SYSTEMTIME → DateTime (UTC) dönüşümü
+            DateTime currentUtc = new DateTime(st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, DateTimeKind.Utc);
+            originalTime = currentUtc;
+
+            // DateTime.AddMonths ile ay ekle - geçersiz tarihler otomatik normalize edilir
+            // Örn: 31 Ocak + 1 ay = 28/29 Şubat (ay sonu davranışı)
+            DateTime shiftedDateTime = currentUtc.AddMonths(months);
+
+            // DateTime → SYSTEMTIME dönüşümü
+            st.wYear = (ushort)shiftedDateTime.Year;
+            st.wMonth = (ushort)shiftedDateTime.Month;
+            st.wDay = (ushort)shiftedDateTime.Day;
+            st.wHour = (ushort)shiftedDateTime.Hour;
+            st.wMinute = (ushort)shiftedDateTime.Minute;
+            st.wSecond = (ushort)shiftedDateTime.Second;
+            st.wMilliseconds = (ushort)shiftedDateTime.Millisecond;
+
             SetSystemTime(ref st);
             Application.DoEvents();
 
-            shiftedTime = DateTime.UtcNow;
+            // shiftedTime'ı hesaplanan değerden al (tutarlılık için)
+            shiftedTime = shiftedDateTime;
             isShifted = true;
             warningShown = false;
 
