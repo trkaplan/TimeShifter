@@ -38,15 +38,18 @@ A Windows system tray application that temporarily shifts the system clock forwa
 
 ## Installation
 
-### Option 1: Download Release
-Download the latest `TimeShifter.zip` from [Releases](../../releases). Extract the zip file and run `TimeShifter.exe`.
+### Option 1: Download Release (Recommended)
+Download the latest `TimeShifter.exe` from [Releases](../../releases). If Windows shows a security warning, click "More info" and then "Run anyway" to proceed.
 
-> **Note**: For domain-managed Windows 11 machines, downloading `.exe` files directly from Chrome may trigger security warnings. Using the `.zip` format avoids this issue.
+### Option 2: Build from Source Code
+For users with security concerns or who want to verify the source code:
 
-### Option 2: Build from Source
-```batch
-build.bat
-```
+1. Download the `Source code (zip)` from [Releases](../../releases)
+2. Extract the zip file
+3. Run `build.bat` to compile `TimeShifter.exe`
+4. Run the generated `TimeShifter.exe`
+
+> **Note**: Building from source allows you to verify the code and create your own executable, which may avoid security warnings on domain-managed Windows 11 machines.
 
 ## How It Works
 
@@ -101,15 +104,18 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 
 ## Kurulum
 
-### Seçenek 1: Release İndir
-[Releases](../../releases) sayfasından son `TimeShifter.zip` dosyasını indirin. Zip dosyasını açın ve `TimeShifter.exe` dosyasını çalıştırın.
-
-> **Not**: Domain ile yönetilen Windows 11 makinelerinde Chrome ile doğrudan `.exe` dosyası indirirken güvenlik uyarısı çıkabilir. `.zip` formatı kullanarak bu sorunu önleyebilirsiniz.
+### Seçenek 1: Release İndir (Önerilen)
+[Releases](../../releases) sayfasından son `TimeShifter.exe` dosyasını indirin. Windows güvenlik uyarısı gösterirse, "Daha fazla bilgi" ve ardından "Yine de çalıştır" seçeneğini tıklayın.
 
 ### Seçenek 2: Kaynak Koddan Derle
-```batch
-build.bat
-```
+Güvenlik endişesi olan veya kaynak kodu doğrulamak isteyen kullanıcılar için:
+
+1. [Releases](../../releases) sayfasından `Source code (zip)` dosyasını indirin
+2. Zip dosyasını açın
+3. `build.bat` dosyasını çalıştırarak `TimeShifter.exe` dosyasını derleyin
+4. Oluşturulan `TimeShifter.exe` dosyasını çalıştırın
+
+> **Not**: Kaynak koddan derleme, kodu doğrulamanıza ve kendi çalıştırılabilir dosyanızı oluşturmanıza olanak tanır. Bu, domain ile yönetilen Windows 11 makinelerinde güvenlik uyarılarını önleyebilir.
 
 ## Lisans
 
