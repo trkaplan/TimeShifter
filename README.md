@@ -38,13 +38,15 @@ A Windows system tray application that temporarily shifts the system clock forwa
 
 ## Installation
 
-### Option 1: Download Release (Recommended)
-Download the latest `TimeShifter.exe` from [Releases](../../releases). If Windows shows a security warning, click "More info" and then "Run anyway" to proceed.
+### Option 1: Download Executable (Recommended)
+**👉 Download `TimeShifter.exe` directly from [Releases](../../releases)** (look for `TimeShifter.exe` in the assets section, NOT the "Source code" links).
+
+If Windows shows a security warning, click "More info" and then "Run anyway" to proceed.
 
 ### Option 2: Build from Source Code
 For users with security concerns or who want to verify the source code:
 
-1. Download the `Source code (zip)` from [Releases](../../releases)
+1. Download `TimeShifter-v1.0.2-source.zip` from [Releases](../../releases) assets (NOT the automatic "Source code" zip)
 2. Extract the zip file
 3. Run `build.bat` to compile `TimeShifter.exe`
 4. Run the generated `TimeShifter.exe`
@@ -104,13 +106,15 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 
 ## Kurulum
 
-### Seçenek 1: Release İndir (Önerilen)
-[Releases](../../releases) sayfasından son `TimeShifter.exe` dosyasını indirin. Windows güvenlik uyarısı gösterirse, "Daha fazla bilgi" ve ardından "Yine de çalıştır" seçeneğini tıklayın.
+### Seçenek 1: Çalıştırılabilir Dosyayı İndir (Önerilen)
+**👉 [Releases](../../releases) sayfasından direkt `TimeShifter.exe` dosyasını indirin** (assets bölümündeki `TimeShifter.exe` dosyasını arayın, otomatik "Source code" linklerini DEĞİL).
+
+Windows güvenlik uyarısı gösterirse, "Daha fazla bilgi" ve ardından "Yine de çalıştır" seçeneğini tıklayın.
 
 ### Seçenek 2: Kaynak Koddan Derle
 Güvenlik endişesi olan veya kaynak kodu doğrulamak isteyen kullanıcılar için:
 
-1. [Releases](../../releases) sayfasından `Source code (zip)` dosyasını indirin
+1. [Releases](../../releases) sayfasından `TimeShifter-v1.0.2-source.zip` dosyasını indirin (assets bölümünden, otomatik "Source code" zip'i DEĞİL)
 2. Zip dosyasını açın
 3. `build.bat` dosyasını çalıştırarak `TimeShifter.exe` dosyasını derleyin
 4. Oluşturulan `TimeShifter.exe` dosyasını çalıştırın
