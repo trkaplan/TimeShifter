@@ -39,7 +39,7 @@ A Windows system tray application that temporarily shifts the system clock forwa
 ## Installation
 
 ### Option 1: Download Executable (Recommended)
-**👉 Download `TimeShifter.exe` directly from [Releases](../../releases)** (look for `TimeShifter.exe` in the assets section, NOT the "Source code" links).
+**👉 Download `TimeShifter.exe` directly from [Releases](../../releases)**
 
 If Windows shows a security warning, click "More info" and then "Run anyway" to proceed.
 
@@ -107,7 +107,7 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 ## Kurulum
 
 ### Seçenek 1: Çalıştırılabilir Dosyayı İndir (Önerilen)
-**👉 [Releases](../../releases) sayfasından direkt `TimeShifter.exe` dosyasını indirin** (assets bölümündeki `TimeShifter.exe` dosyasını arayın, otomatik "Source code" linklerini DEĞİL).
+**👉 [Releases](../../releases) sayfasından direkt `TimeShifter.exe` dosyasını indirin**
 
 Windows güvenlik uyarısı gösterirse, "Daha fazla bilgi" ve ardından "Yine de çalıştır" seçeneğini tıklayın.
 
