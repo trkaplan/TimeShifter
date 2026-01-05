@@ -4,6 +4,11 @@ A Windows system tray application that temporarily shifts the system clock forwa
 
 **[Türkçe](#türkçe)**
 
+
+## Demo (GIF)
+
+![TimeShifter demo](ss/time-shifter-demo.gif)
+
 ## Features
 
 - **Tray Icon Status**:
@@ -34,7 +39,9 @@ A Windows system tray application that temporarily shifts the system clock forwa
 ## Installation
 
 ### Option 1: Download Release
-Download the latest `TimeShifter.exe` from [Releases](../../releases).
+Download the latest `TimeShifter.zip` from [Releases](../../releases). Extract the zip file and run `TimeShifter.exe`.
+
+> **Note**: For domain-managed Windows 11 machines, downloading `.exe` files directly from Chrome may trigger security warnings. Using the `.zip` format avoids this issue.
 
 ### Option 2: Build from Source
 ```batch
@@ -95,7 +102,9 @@ Windows sistem saatini geçici olarak ileri alan system tray uygulaması.
 ## Kurulum
 
 ### Seçenek 1: Release İndir
-[Releases](../../releases) sayfasından son sürümü indirin.
+[Releases](../../releases) sayfasından son `TimeShifter.zip` dosyasını indirin. Zip dosyasını açın ve `TimeShifter.exe` dosyasını çalıştırın.
+
+> **Not**: Domain ile yönetilen Windows 11 makinelerinde Chrome ile doğrudan `.exe` dosyası indirirken güvenlik uyarısı çıkabilir. `.zip` formatı kullanarak bu sorunu önleyebilirsiniz.
 
 ### Seçenek 2: Kaynak Koddan Derle
 ```batch
